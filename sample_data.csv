@@ -1,0 +1,17 @@
+Category,Status,Priority,Department,Count,Revenue,Rating
+Electronics,Active,High,IT,15,25000,4.2
+Electronics,Inactive,Medium,IT,8,12000,3.8
+Clothing,Active,High,Sales,12,18000,4.5
+Clothing,Active,Low,Sales,5,8000,4.0
+Clothing,Inactive,Medium,Sales,3,5000,3.5
+Books,Active,High,Marketing,20,30000,4.7
+Books,Active,Low,Marketing,7,10000,4.1
+Books,Inactive,Low,Marketing,2,3000,3.2
+Home,Active,Medium,Operations,18,22000,4.3
+Home,Inactive,High,Operations,4,8000,3.9
+Food,Active,High,Kitchen,25,35000,4.6
+Food,Active,Medium,Kitchen,10,15000,4.2
+Food,Inactive,Low,Kitchen,1,2000,3.0
+Automotive,Active,High,Service,16,28000,4.4
+Automotive,Active,Medium,Service,9,14000,4.0
+Automotive,Inactive,Low,Service,2,4000,3.3
