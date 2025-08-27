@@ -27,7 +27,11 @@ const ExportOptions = ({ chartExportData, pivotExportData, fileName }) => {
 
     try {
       // Find the chart container in the DOM
-      const chartContainer = document.querySelector('[data-chart-type="pie"], [data-chart-type="bar"]');
+      const chartContainer = document.querySelector('[data-chart-type]');
+      console.log('Looking for chart container with data-chart-type attribute...');
+      console.log('Found chart container:', chartContainer);
+      console.log('Chart type:', chartContainer?.getAttribute('data-chart-type'));
+      
       if (!chartContainer) {
         alert('Chart not found. Please make sure a chart is visible on the page.');
         return;
@@ -68,7 +72,11 @@ const ExportOptions = ({ chartExportData, pivotExportData, fileName }) => {
 
     try {
       // Find the chart container in the DOM
-      const chartContainer = document.querySelector('[data-chart-type="pie"], [data-chart-type="bar"]');
+      const chartContainer = document.querySelector('[data-chart-type]');
+      console.log('Looking for chart container with data-chart-type attribute...');
+      console.log('Found chart container:', chartContainer);
+      console.log('Chart type:', chartContainer?.getAttribute('data-chart-type'));
+      
       if (!chartContainer) {
         alert('Chart not found. Please make sure a chart is visible on the page.');
         return;
