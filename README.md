@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Excel/CSV Analyzer
 
 A React application that allows users to upload Excel (.xlsx, .xls) or CSV files and view the detected column headers with data preview.
@@ -112,3 +113,6 @@ The modular architecture makes it easy to add:
 ## License
 
 This project is open source and available under the MIT License.
+=======
+# AnalystAgent
+>>>>>>> 0b040ef7e80fc075e0f466aa6f7858f94cb47aea
