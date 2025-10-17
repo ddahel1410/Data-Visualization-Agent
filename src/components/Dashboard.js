@@ -1,12 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, Suspense, lazy } from 'react';
 import Welcome from './Welcome';
-import ChartPreview from './ChartPreview';
-import PivotTable from './PivotTable';
-import DataPreview from './DataPreview';
-import DataQualityDashboard from './DataQualityDashboard';
-import SmartRecommendations from './SmartRecommendations';
-import DataComparison from './DataComparison';
-import DashboardBuilder from './DashboardBuilder';
+
+// Lazy load heavy components to prevent simultaneous analysis
+const ChartPreview = lazy(() => import('./ChartPreview'));
+const PivotTable = lazy(() => import('./PivotTable'));
+const DataPreview = lazy(() => import('./DataPreview'));
+const DataQualityDashboard = lazy(() => import('./DataQualityDashboard'));
+const SmartRecommendations = lazy(() => import('./SmartRecommendations'));
+const DataComparison = lazy(() => import('./DataComparison'));
+const DashboardBuilder = lazy(() => import('./DashboardBuilder'));
 
 const Dashboard = ({ data, fileName }) => {
   const [activeTab, setActiveTab] = useState('welcome');
@@ -43,13 +45,13 @@ const Dashboard = ({ data, fileName }) => {
       id: 'welcome',
       name: 'Welcome',
       icon: '🎉',
-      description: 'Get started with Analyst Agent - your comprehensive data analysis platform'
+      description: 'Get started with Data Visualization Agent - your comprehensive data analysis platform'
     },
     {
       id: 'smart-recommendations',
-      name: 'Smart AI',
-      icon: '🧠',
-      description: 'Get AI-powered recommendations for your data analysis'
+      name: 'Smart Recommendations',
+      icon: '💡',
+      description: 'Get intelligent recommendations for your data analysis'
     },
     {
       id: 'data-quality',
@@ -114,82 +116,155 @@ const Dashboard = ({ data, fileName }) => {
       return <NoDataMessage tabName={tabs.find(tab => tab.id === activeTab)?.name} />;
     }
 
+    // Only render the active tab component to prevent all components from analyzing data simultaneously
     switch (activeTab) {
       case 'welcome':
         return <Welcome hasData={hasData} data={data} />;
       case 'smart-recommendations':
         return (
-          <SmartRecommendations 
-            data={data} 
-            onNavigateToTab={setActiveTab}
-            onConfigureChart={(config) => {
-              // Update chart configuration when a recommendation is clicked
-              setChartConfig({
-                chartType: config.chartType || 'pie',
-                categoryColumn: config.categoryColumn || '',
-                valueColumn: config.valueColumn || '',
-                filterColumn: '',
-                filterValue: ''
-              });
-            }}
-          />
+          <Suspense fallback={
+            <div className="p-8 text-center">
+              <div className="mx-auto w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4 animate-pulse">
+                <span className="text-2xl">🧠</span>
+              </div>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">Loading AI Recommendations</h3>
+              <p className="text-gray-600">Preparing smart analysis...</p>
+            </div>
+          }>
+            <SmartRecommendations 
+              data={data} 
+              onNavigateToTab={setActiveTab}
+              onConfigureChart={(config) => {
+                // Update chart configuration when a recommendation is clicked
+                setChartConfig({
+                  chartType: config.chartType || 'pie',
+                  categoryColumn: config.categoryColumn || '',
+                  valueColumn: config.valueColumn || '',
+                  filterColumn: '',
+                  filterValue: ''
+                });
+              }}
+            />
+          </Suspense>
         );
       case 'data-quality':
-        return <DataQualityDashboard data={data} />;
+        return (
+          <Suspense fallback={
+            <div className="p-8 text-center">
+              <div className="mx-auto w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4 animate-pulse">
+                <span className="text-2xl">🔍</span>
+              </div>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">Loading Data Quality Analysis</h3>
+              <p className="text-gray-600">Preparing quality insights...</p>
+            </div>
+          }>
+            <DataQualityDashboard data={data} />
+          </Suspense>
+        );
       case 'data-comparison':
-        return <DataComparison data={data} onNavigateToTab={setActiveTab} onConfigureChart={() => {}} />;
+        return (
+          <Suspense fallback={
+            <div className="p-8 text-center">
+              <div className="mx-auto w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4 animate-pulse">
+                <span className="text-2xl">🔍</span>
+              </div>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">Loading Data Comparison</h3>
+              <p className="text-gray-600">Preparing comparison tools...</p>
+            </div>
+          }>
+            <DataComparison data={data} onNavigateToTab={setActiveTab} onConfigureChart={() => {}} />
+          </Suspense>
+        );
       case 'dashboard-builder':
         return (
-          <DashboardBuilder 
-            data={data} 
-            dashboardCharts={dashboardCharts}
-            setDashboardCharts={setDashboardCharts}
-          />
+          <Suspense fallback={
+            <div className="p-8 text-center">
+              <div className="mx-auto w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4 animate-pulse">
+                <span className="text-2xl">📊</span>
+              </div>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">Loading Dashboard Builder</h3>
+              <p className="text-gray-600">Preparing interactive dashboard...</p>
+            </div>
+          }>
+            <DashboardBuilder 
+              data={data} 
+              dashboardCharts={dashboardCharts}
+              setDashboardCharts={setDashboardCharts}
+            />
+          </Suspense>
         );
       case 'charts':
         return (
-          <ChartPreview 
-            data={data} 
-            onReset={() => {
-              setChartConfig({
-                chartType: 'pie',
-                categoryColumn: '',
-                valueColumn: '',
-                filterColumn: '',
-                filterValue: ''
-              });
-            }}
-            config={chartConfig}
-            onConfigChange={setChartConfig}
-          />
+          <Suspense fallback={
+            <div className="p-8 text-center">
+              <div className="mx-auto w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4 animate-pulse">
+                <span className="text-2xl">📊</span>
+              </div>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">Loading Chart Visualization</h3>
+              <p className="text-gray-600">Preparing chart tools...</p>
+            </div>
+          }>
+            <ChartPreview 
+              data={data} 
+              onReset={() => {
+                setChartConfig({
+                  chartType: 'pie',
+                  categoryColumn: '',
+                  valueColumn: '',
+                  filterColumn: '',
+                  filterValue: ''
+                });
+              }}
+              config={chartConfig}
+              onConfigChange={setChartConfig}
+            />
+          </Suspense>
         );
       case 'pivot':
         return (
-          <PivotTable 
-            data={data} 
-            onReset={() => {
-              setPivotConfig({
-                rowColumns: [''],
-                columnColumn: '',
-                valueColumn: '',
-                filterColumn: '',
-                filterValue: '',
-                calculationType: 'sum',
-                showSubtotals: true,
-                showGrandTotal: true,
-                conditionalFormatting: true,
-                expandedSections: []
-              });
-            }}
-            config={pivotConfig}
-            onConfigChange={setPivotConfig}
-          />
+          <Suspense fallback={
+            <div className="p-8 text-center">
+              <div className="mx-auto w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4 animate-pulse">
+                <span className="text-2xl">🔢</span>
+              </div>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">Loading Pivot Tables</h3>
+              <p className="text-gray-600">Preparing pivot analysis...</p>
+            </div>
+          }>
+            <PivotTable 
+              data={data} 
+              onReset={() => {
+                setPivotConfig({
+                  rowColumns: [''],
+                  columnColumn: '',
+                  valueColumn: '',
+                  filterColumn: '',
+                  filterValue: '',
+                  calculationType: 'sum',
+                  showSubtotals: true,
+                  showGrandTotal: true,
+                  conditionalFormatting: true,
+                  expandedSections: []
+                });
+              }}
+              config={pivotConfig}
+              onConfigChange={setPivotConfig}
+            />
+          </Suspense>
         );
       case 'data':
         return (
-          <DataPreview 
-            data={data} 
-          />
+          <Suspense fallback={
+            <div className="p-8 text-center">
+              <div className="mx-auto w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4 animate-pulse">
+                <span className="text-2xl">📋</span>
+              </div>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">Loading Data Preview</h3>
+              <p className="text-gray-600">Preparing data view...</p>
+            </div>
+          }>
+            <DataPreview data={data} />
+          </Suspense>
         );
       default:
         return <Welcome />;
@@ -204,7 +279,7 @@ const Dashboard = ({ data, fileName }) => {
           <div className="w-full max-w-7xl">
             <div className="flex justify-between items-center py-4">
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">Analyst Agent</h1>
+                <h1 className="text-2xl font-bold text-gray-900">Data Visualization Agent</h1>
                 <p className="text-sm text-gray-600">Professional Data Analysis Dashboard</p>
               </div>
               <div className="flex items-center space-x-3">
@@ -244,9 +319,9 @@ const Dashboard = ({ data, fileName }) => {
                   `}
                   disabled={!hasData && tab.id !== 'welcome'}
                 >
-                                             <div className="flex items-center space-x-2">
-                             <span>{tab.name}</span>
-                           </div>
+                  <div className="flex items-center space-x-2">
+                    <span>{tab.name}</span>
+                  </div>
                 </button>
               ))}
             </nav>

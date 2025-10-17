@@ -1,5 +1,5 @@
 {
-  "name": "excel-csv-analyzer",
+  "name": "data-visualization-agent",
   "version": "0.1.0",
   "private": true,
   "dependencies": {
@@ -8,6 +8,8 @@
     "@testing-library/user-event": "^13.5.0",
     "file-saver": "^2.0.5",
     "html-to-image": "^1.11.11",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^3.0.3",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-scripts": "5.0.1",
@@ -15,7 +17,7 @@
     "xlsx": "^0.18.5"
   },
   "scripts": {
-    "start": "react-scripts start",
+    "start": "PORT=3011 react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject"

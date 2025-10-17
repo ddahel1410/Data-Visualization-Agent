@@ -1,15 +1,18 @@
 import React, { useState, useMemo, useCallback } from 'react';
 
 const DataPreview = ({ data }) => {
+  // State variables - defined first so they can be used in useMemo
+  const [searchTerm, setSearchTerm] = useState('');
+  const [visibleRows, setVisibleRows] = useState(500);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [expandedSections, setExpandedSections] = useState({
     columnHeaders: false,
     dataPreview: false
   });
 
   // Performance optimization constants
-  const PREVIEW_CHUNK_SIZE = 100; // Show data in 100-row chunks
-  const MAX_VISIBLE_ROWS = 500; // Maximum rows to render at once
-  const SCROLL_THRESHOLD = 50; // Pixels from bottom to trigger load more
+  const PREVIEW_CHUNK_SIZE = 200; // Show data in 200-row chunks
+  const MAX_VISIBLE_ROWS = 1000; // Maximum rows to render at once
 
   // Memoized data processing for performance
   const processedData = useMemo(() => {
@@ -23,25 +26,32 @@ const DataPreview = ({ data }) => {
     }
 
     const headers = data.headers || [];
-    const sourceData = data.rows || data.preview || [];
-    const totalRows = sourceData.length;
+    // Prioritize rows over preview, but fall back to preview if rows is empty
+    const sourceData = (data.rows && data.rows.length > 0) ? data.rows : (data.preview || []);
+    const totalRows = data.totalRows || sourceData.length;
 
-    // For large datasets, only show preview data
-    const previewData = totalRows > MAX_VISIBLE_ROWS 
+    // For large datasets, show available data up to MAX_VISIBLE_ROWS
+    let previewData = sourceData.length > MAX_VISIBLE_ROWS 
       ? sourceData.slice(0, MAX_VISIBLE_ROWS)
       : sourceData;
+
+    // Apply search filter if search term exists
+    if (searchTerm.trim()) {
+      const searchLower = searchTerm.toLowerCase();
+      previewData = previewData.filter(row => 
+        Object.values(row).some(value => 
+          String(value).toLowerCase().includes(searchLower)
+        )
+      );
+    }
 
     return {
       headers,
       totalRows,
       previewData,
-      hasMoreData: totalRows > MAX_VISIBLE_ROWS
+      hasMoreData: totalRows > MAX_VISIBLE_ROWS || sourceData.length > MAX_VISIBLE_ROWS
     };
-  }, [data]);
-
-  // Virtual scrolling state
-  const [visibleRows, setVisibleRows] = useState(PREVIEW_CHUNK_SIZE);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  }, [data, searchTerm]);
 
   // Load more data function
   const loadMoreData = useCallback(async () => {
@@ -169,6 +179,22 @@ const DataPreview = ({ data }) => {
         
         {expandedSections.dataPreview && (
           <div className="mt-3">
+            {/* Search Bar */}
+            <div className="mb-4">
+              <input
+                type="text"
+                placeholder="Search across all columns..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              {searchTerm && (
+                <p className="text-sm text-gray-500 mt-1">
+                  Found {processedData.previewData.length} matching rows
+                </p>
+              )}
+            </div>
+
             {/* Performance Notice for Large Files */}
             {processedData.hasMoreData && (
               <div className="mb-4 bg-blue-50 border border-blue-200 rounded-lg p-4">

@@ -15,9 +15,23 @@ const PivotTable = ({ data, onReset, config, onConfigChange }) => {
   const [conditionalFormatting, setConditionalFormatting] = useState(true);
   const [drillDownLevel, setDrillDownLevel] = useState(0); // For drill-down capabilities
   const [expandedSections, setExpandedSections] = useState(new Set()); // Track expanded/collapsed sections
-  const [showDebugColumns, setShowDebugColumns] = useState(false); // Show internal metadata columns
   const [drillDownData, setDrillDownData] = useState(null); // Store drill-down data
   const [drillDownPosition, setDrillDownPosition] = useState({ x: 0, y: 0 }); // Position for drill-down modal
+  const [showEnhancedOptions, setShowEnhancedOptions] = useState(false); // Collapse/expand enhanced options panel
+  
+  // New features
+  const [sortBy, setSortBy] = useState('none'); // none, label-asc, label-desc, value-asc, value-desc
+  const [decimalPlaces, setDecimalPlaces] = useState(2); // Number of decimal places
+  const [showThousandsSeparator, setShowThousandsSeparator] = useState(true);
+  const [currencySymbol, setCurrencySymbol] = useState('none'); // none, $, €, £, ¥
+  const [topBottomFilter, setTopBottomFilter] = useState('none'); // none, top-5, top-10, bottom-5, bottom-10
+  const [percentageMode, setPercentageMode] = useState('none'); // none, row-total, column-total, grand-total
+  const [activeOptionsTab, setActiveOptionsTab] = useState('display'); // display, sorting, format, percentages, colors
+  const [showColumnTotals, setShowColumnTotals] = useState(false); // Show totals row at top for each column
+  const [colorScaleMode, setColorScaleMode] = useState('none'); // none, heatmap, threshold
+  const [thresholdGreen, setThresholdGreen] = useState(100);
+  const [thresholdRed, setThresholdRed] = useState(0);
+  const [showLoadModal, setShowLoadModal] = useState(false); // Show load configuration modal
   
   // Prefer full dataset if available
   const sourceRows = useMemo(() => {
@@ -54,6 +68,156 @@ const PivotTable = ({ data, onReset, config, onConfigChange }) => {
       return 'Empty/Null';
     }
     return String(value).trim();
+  };
+
+  // Save/Load Configuration Functions
+  const saveCurrentConfiguration = () => {
+    const configName = prompt('Enter a name for this pivot configuration:');
+    if (!configName) return;
+    
+    const config = {
+      name: configName,
+      timestamp: new Date().toISOString(),
+      version: '1.0',
+      rowColumns,
+      columnColumn,
+      valueColumn,
+      filterColumn,
+      filterValue,
+      calculationType,
+      showSubtotals,
+      showGrandTotal,
+      showColumnTotals,
+      conditionalFormatting,
+      sortBy,
+      decimalPlaces,
+      showThousandsSeparator,
+      currencySymbol,
+      topBottomFilter,
+      percentageMode,
+      colorScaleMode,
+      thresholdGreen,
+      thresholdRed
+    };
+    
+    // Download as JSON file
+    const jsonString = JSON.stringify(config, null, 2);
+    const blob = new Blob([jsonString], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `pivot_config_${configName.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_${new Date().toISOString().split('T')[0]}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+  
+  const loadConfiguration = (config) => {
+    setRowColumns(config.rowColumns);
+    setColumnColumn(config.columnColumn);
+    setValueColumn(config.valueColumn);
+    setFilterColumn(config.filterColumn || '');
+    setFilterValue(config.filterValue || '');
+    setCalculationType(config.calculationType);
+    setShowSubtotals(config.showSubtotals);
+    setShowGrandTotal(config.showGrandTotal);
+    setShowColumnTotals(config.showColumnTotals || false);
+    setConditionalFormatting(config.conditionalFormatting);
+    setSortBy(config.sortBy);
+    setDecimalPlaces(config.decimalPlaces);
+    setShowThousandsSeparator(config.showThousandsSeparator);
+    setCurrencySymbol(config.currencySymbol);
+    setTopBottomFilter(config.topBottomFilter || 'none');
+    setPercentageMode(config.percentageMode || 'none');
+    setColorScaleMode(config.colorScaleMode || 'none');
+    setThresholdGreen(config.thresholdGreen || 100);
+    setThresholdRed(config.thresholdRed || 0);
+    setShowLoadModal(false);
+  };
+  
+  const handleFileUpload = (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const config = JSON.parse(e.target.result);
+        loadConfiguration(config);
+        alert(`Configuration "${config.name}" loaded successfully!`);
+      } catch (error) {
+        alert('Error loading configuration file. Please ensure it is a valid pivot configuration JSON file.');
+        console.error('Config load error:', error);
+      }
+    };
+    reader.readAsText(file);
+  };
+  
+  const clearAllSelections = () => {
+    if (!window.confirm('Clear all pivot table selections and reset to defaults?')) return;
+    
+    // Reset all pivot configurations
+    setRowColumns(['']);
+    setColumnColumn('');
+    setValueColumn('');
+    setFilterColumn('');
+    setFilterValue('');
+    
+    // Reset enhanced options to defaults
+    setCalculationType('sum');
+    setShowSubtotals(true);
+    setShowGrandTotal(true);
+    setShowColumnTotals(false);
+    setConditionalFormatting(true);
+    setSortBy('none');
+    setDecimalPlaces(2);
+    setShowThousandsSeparator(true);
+    setCurrencySymbol('none');
+    setTopBottomFilter('none');
+    setPercentageMode('none');
+    setColorScaleMode('none');
+    setThresholdGreen(100);
+    setThresholdRed(0);
+    setExpandedSections(new Set());
+  };
+
+  // Helper function to format numbers
+  const formatNumber = (value, rowTotal = null, colTotal = null, grandTotal = null) => {
+    if (value === null || value === undefined || value === '' || isNaN(value)) {
+      return value;
+    }
+    
+    let num = parseFloat(value);
+    
+    // Apply percentage mode if specified
+    if (percentageMode !== 'none' && calculationType !== 'percentage') {
+      if (percentageMode === 'row-total' && rowTotal && rowTotal !== 0) {
+        num = (num / rowTotal) * 100;
+        return num.toFixed(decimalPlaces) + '%';
+      } else if (percentageMode === 'column-total' && colTotal && colTotal !== 0) {
+        num = (num / colTotal) * 100;
+        return num.toFixed(decimalPlaces) + '%';
+      } else if (percentageMode === 'grand-total' && grandTotal && grandTotal !== 0) {
+        num = (num / grandTotal) * 100;
+        return num.toFixed(decimalPlaces) + '%';
+      }
+    }
+    
+    // Apply decimal places
+    let formatted = num.toFixed(decimalPlaces);
+    
+    // Add thousands separator if enabled
+    if (showThousandsSeparator) {
+      const parts = formatted.split('.');
+      parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+      formatted = parts.join('.');
+    }
+    
+    // Add currency symbol
+    if (currencySymbol !== 'none') {
+      formatted = `${currencySymbol}${formatted}`;
+    }
+    
+    return formatted;
   };
 
   // Helper function to get hierarchical row key
@@ -337,6 +501,31 @@ const PivotTable = ({ data, onReset, config, onConfigChange }) => {
       return result;
     };
     
+    // Add column totals row at top if enabled
+    if (showColumnTotals && columnColumn) {
+      const columnTotalsRow = { row: 'COLUMN TOTALS', isColumnTotal: true };
+      uniqueColumns.forEach(col => {
+        let colTotal = uniqueRowKeys.reduce((sum, rowKey) => sum + pivotMatrix[rowKey][col], 0);
+        
+        if (calculationType === 'average' && valueColumn) {
+          const totalCount = uniqueRowKeys.reduce((sum, rowKey) => {
+            const count = filteredData.filter(r => getRowKey(r) === rowKey && getColumnValue(r, columnColumn) === col).length;
+            return sum + count;
+          }, 0);
+          colTotal = totalCount > 0 ? colTotal / totalCount : 0;
+        } else if (calculationType === 'percentage' && valueColumn) {
+          colTotal = 100;
+        }
+        
+        columnTotalsRow[col] = colTotal;
+      });
+      
+      // Add row total for column totals
+      columnTotalsRow.total = uniqueColumns.reduce((sum, col) => sum + columnTotalsRow[col], 0);
+      
+      tableData.push(columnTotalsRow);
+    }
+    
     // Generate the flattened table with subtotals
     tableData.push(...flattenWithSubtotals(groupedRows));
 
@@ -384,8 +573,51 @@ const PivotTable = ({ data, onReset, config, onConfigChange }) => {
       tableData.push(grandTotalRow);
     }
 
-    return { tableData };
-  }, [rowColumns, columnColumn, valueColumn, filterColumn, filterValue, sourceRows, calculationType, showSubtotals, showGrandTotal]);
+    // Apply sorting and top/bottom filtering if specified
+    if (sortBy !== 'none' || topBottomFilter !== 'none') {
+      // Separate grand total and subtotals from regular rows
+      const grandTotal = tableData.filter(row => row.row === 'GRAND TOTAL');
+      let regularRows = tableData.filter(row => row.row !== 'GRAND TOTAL' && !row.isSubtotal);
+      const subtotals = tableData.filter(row => row.isSubtotal);
+      
+      // Sort regular rows based on sortBy option
+      if (sortBy === 'label-asc') {
+        regularRows.sort((a, b) => a.row.localeCompare(b.row));
+      } else if (sortBy === 'label-desc') {
+        regularRows.sort((a, b) => b.row.localeCompare(a.row));
+      } else if (sortBy === 'value-asc') {
+        regularRows.sort((a, b) => (a.total || 0) - (b.total || 0));
+      } else if (sortBy === 'value-desc') {
+        regularRows.sort((a, b) => (b.total || 0) - (a.total || 0));
+      }
+      
+      // Apply top/bottom filter
+      if (topBottomFilter !== 'none') {
+        // Sort by value for top/bottom filtering
+        const sortedByValue = [...regularRows].sort((a, b) => (b.total || 0) - (a.total || 0));
+        
+        if (topBottomFilter === 'top-5') {
+          regularRows = sortedByValue.slice(0, 5);
+        } else if (topBottomFilter === 'top-10') {
+          regularRows = sortedByValue.slice(0, 10);
+        } else if (topBottomFilter === 'top-20') {
+          regularRows = sortedByValue.slice(0, 20);
+        } else if (topBottomFilter === 'bottom-5') {
+          regularRows = sortedByValue.slice(-5).reverse();
+        } else if (topBottomFilter === 'bottom-10') {
+          regularRows = sortedByValue.slice(-10).reverse();
+        } else if (topBottomFilter === 'bottom-20') {
+          regularRows = sortedByValue.slice(-20).reverse();
+        }
+      }
+      
+      // Rebuild table with sorted/filtered rows, preserving subtotals and grand total
+      tableData.length = 0;
+      tableData.push(...regularRows, ...subtotals, ...grandTotal);
+    }
+
+    return { tableData, uniqueColumns };
+  }, [rowColumns, columnColumn, valueColumn, filterColumn, filterValue, sourceRows, calculationType, showSubtotals, showGrandTotal, sortBy, topBottomFilter]);
 
   // Notify parent component when pivot data is ready for export
   useEffect(() => {
@@ -423,11 +655,10 @@ const PivotTable = ({ data, onReset, config, onConfigChange }) => {
   const renderPivotTable = () => {
     if (!pivotData.tableData || pivotData.tableData.length === 0) return null;
     
-    // Filter out internal metadata columns (unless debug mode is on)
+    // Filter out internal metadata columns
     const metadataColumns = ['level', 'path', 'isDataRow', 'isSubtotal', 'sectionKey', 'hasChildren', 'childCount', 'parentKey'];
     const columns = Object.keys(pivotData.tableData[0]).filter(key => {
       if (key === 'row') return false;
-      if (showDebugColumns) return true;
       return !metadataColumns.includes(key);
     });
     
@@ -465,12 +696,42 @@ const PivotTable = ({ data, onReset, config, onConfigChange }) => {
               
               // Conditional formatting based on values
               const getCellStyle = (value, col) => {
-                // Always apply professional styling for totals (not affected by conditional formatting toggle)
+                // Always apply professional styling for totals
                 if (isGrandTotal) return 'bg-blue-100 font-bold';
                 if (isSubtotal) return 'bg-blue-50 font-semibold';
+                if (row.isColumnTotal) return 'bg-purple-100 font-bold';
                 
-                // Color coding for high/low values (only for data rows and only when conditional formatting is enabled)
-                if (conditionalFormatting && typeof value === 'number' && row.isDataRow) {
+                // Apply advanced color scales
+                if (typeof value === 'number' && row.isDataRow) {
+                  // Threshold mode
+                  if (colorScaleMode === 'threshold') {
+                    if (value >= thresholdGreen) return 'bg-green-200 font-medium';
+                    if (value <= thresholdRed) return 'bg-red-200 font-medium';
+                    return 'bg-yellow-100';
+                  }
+                  
+                  // Heatmap mode
+                  if (colorScaleMode === 'heatmap') {
+                    const allValues = pivotData.tableData.filter(r => r.isDataRow).map(r => r[col]).filter(v => typeof v === 'number');
+                    if (allValues.length > 0) {
+                      const max = Math.max(...allValues);
+                      const min = Math.min(...allValues);
+                      const range = max - min;
+                      
+                      if (range > 0) {
+                        const normalized = (value - min) / range;
+                        // Gradient from red (low) to yellow (mid) to green (high)
+                        if (normalized >= 0.8) return 'bg-green-300 font-medium';
+                        if (normalized >= 0.6) return 'bg-green-200';
+                        if (normalized >= 0.4) return 'bg-yellow-200';
+                        if (normalized >= 0.2) return 'bg-orange-200';
+                        return 'bg-red-200';
+                      }
+                    }
+                  }
+                  
+                  // Legacy conditional formatting mode
+                  if (conditionalFormatting && colorScaleMode === 'none') {
                   const allValues = pivotData.tableData.filter(r => r.isDataRow).map(r => r[col]).filter(v => typeof v === 'number');
                   if (allValues.length > 0) {
                     const max = Math.max(...allValues);
@@ -481,6 +742,7 @@ const PivotTable = ({ data, onReset, config, onConfigChange }) => {
                       const normalized = (value - min) / range;
                       if (normalized > 0.8) return 'bg-green-100';
                       if (normalized < 0.2) return 'bg-red-100';
+                      }
                     }
                   }
                 }
@@ -516,6 +778,12 @@ const PivotTable = ({ data, onReset, config, onConfigChange }) => {
                     const cellStyle = getCellStyle(value, col);
                     const canDrillDown = row.isDataRow || row.isSubtotal;
                     
+                    // Get totals for percentage calculations
+                    const rowTotal = row.total;
+                    const grandTotalRow = pivotData.tableData.find(r => r.row === 'GRAND TOTAL');
+                    const columnTotal = grandTotalRow ? grandTotalRow[col] : null;
+                    const grandTotal = grandTotalRow ? grandTotalRow.total : null;
+                    
                     return (
                       <td 
                         key={colIndex} 
@@ -525,10 +793,8 @@ const PivotTable = ({ data, onReset, config, onConfigChange }) => {
                       >
                         {typeof value === 'number' ? 
                           (calculationType === 'percentage' ? 
-                            value.toFixed(1) + '%' : 
-                            calculationType === 'average' ? 
-                              value.toFixed(2) : 
-                              value.toLocaleString()
+                            value.toFixed(decimalPlaces) + '%' : 
+                            formatNumber(value, rowTotal, columnTotal, grandTotal)
                           ) : 
                           value
                         }
@@ -552,9 +818,11 @@ const PivotTable = ({ data, onReset, config, onConfigChange }) => {
           <p className="text-gray-600">Create interactive pivot tables to analyze your data relationships</p>
         </div>
         
-        {/* Export Buttons */}
-        {pivotData && pivotData.tableData && pivotData.tableData.length > 0 && (
+        {/* Action Buttons */}
           <div className="flex space-x-2">
+          {/* Export Buttons - Only show when pivot table exists */}
+          {pivotData && pivotData.tableData && pivotData.tableData.length > 0 && (
+            <>
             <button
               onClick={() => {
                 // Find the pivot table container in the DOM
@@ -650,9 +918,84 @@ const PivotTable = ({ data, onReset, config, onConfigChange }) => {
             >
               📊 Export Excel
             </button>
-          </div>
-        )}
+            </>
+          )}
+          
+          {/* Save/Load Config - Always visible */}
+          <button
+            onClick={saveCurrentConfiguration}
+            className="px-3 py-2 bg-blue-500 text-white text-sm font-medium rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200"
+            title="Save current pivot configuration as JSON"
+          >
+            💾 Save Config
+          </button>
+          <button
+            onClick={() => setShowLoadModal(true)}
+            className="px-3 py-2 bg-indigo-500 text-white text-sm font-medium rounded-md hover:bg-indigo-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-200"
+            title="Load a saved pivot configuration"
+          >
+            📂 Load Config
+          </button>
       </div>
+      </div>
+      
+      {/* Load Configuration Modal */}
+      {showLoadModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div className="flex justify-between items-center p-6 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">Load Pivot Configuration</h3>
+              <button
+                onClick={() => setShowLoadModal(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <span className="text-2xl">×</span>
+              </button>
+            </div>
+            
+            <div className="p-6">
+              <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-blue-400 transition-colors">
+                <div className="mb-4">
+                  <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                  </svg>
+                </div>
+                <label htmlFor="config-upload" className="cursor-pointer">
+                  <span className="mt-2 block text-sm font-medium text-gray-900">
+                    Click to upload a configuration file
+                  </span>
+                  <span className="mt-1 block text-xs text-gray-500">
+                    JSON files only
+                  </span>
+                  <input
+                    id="config-upload"
+                    type="file"
+                    accept=".json"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+              
+              <div className="mt-4 p-3 bg-blue-50 rounded-md">
+                <p className="text-xs text-blue-800">
+                  <strong>💡 Tip:</strong> Upload a previously saved pivot configuration JSON file to restore all settings including columns, filters, formatting, and color schemes.
+                </p>
+              </div>
+            </div>
+            
+            <div className="flex justify-end gap-3 p-6 border-t border-gray-200">
+              <button
+                onClick={() => setShowLoadModal(false)}
+                className="px-4 py-2 bg-gray-200 text-gray-800 text-sm font-medium rounded-md hover:bg-gray-300 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
       {/* Configuration Controls */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-6 mb-6">
         <div>
@@ -725,8 +1068,77 @@ const PivotTable = ({ data, onReset, config, onConfigChange }) => {
       )}
 
       {/* Enhanced Pivot Table Options */}
-      <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-md">
-        <h3 className="text-sm font-medium text-blue-800 mb-3">🎯 Enhanced Pivot Options</h3>
+      <div className="mb-6 bg-blue-50 border border-blue-200 rounded-md">
+        <button
+          onClick={() => setShowEnhancedOptions(!showEnhancedOptions)}
+          className="w-full px-4 py-3 flex items-center justify-between hover:bg-blue-100 transition-colors rounded-t-md"
+        >
+          <h3 className="text-sm font-medium text-blue-800">🎯 Enhanced Pivot Options</h3>
+          <span className="text-blue-600 text-lg">
+            {showEnhancedOptions ? '▼' : '▶'}
+          </span>
+        </button>
+        
+        {showEnhancedOptions && (
+          <div className="border-t border-blue-200">
+            {/* Tabs */}
+            <div className="flex border-b border-blue-200 bg-blue-100">
+              <button
+                onClick={() => setActiveOptionsTab('display')}
+                className={`px-4 py-2 text-xs font-medium transition-colors ${
+                  activeOptionsTab === 'display'
+                    ? 'bg-blue-50 text-blue-800 border-b-2 border-blue-600'
+                    : 'text-blue-600 hover:bg-blue-50'
+                }`}
+              >
+                📊 Display
+              </button>
+              <button
+                onClick={() => setActiveOptionsTab('sorting')}
+                className={`px-4 py-2 text-xs font-medium transition-colors ${
+                  activeOptionsTab === 'sorting'
+                    ? 'bg-blue-50 text-blue-800 border-b-2 border-blue-600'
+                    : 'text-blue-600 hover:bg-blue-50'
+                }`}
+              >
+                🔽 Sort & Filter
+              </button>
+              <button
+                onClick={() => setActiveOptionsTab('format')}
+                className={`px-4 py-2 text-xs font-medium transition-colors ${
+                  activeOptionsTab === 'format'
+                    ? 'bg-blue-50 text-blue-800 border-b-2 border-blue-600'
+                    : 'text-blue-600 hover:bg-blue-50'
+                }`}
+              >
+                🔢 Number Format
+              </button>
+              <button
+                onClick={() => setActiveOptionsTab('percentages')}
+                className={`px-4 py-2 text-xs font-medium transition-colors ${
+                  activeOptionsTab === 'percentages'
+                    ? 'bg-blue-50 text-blue-800 border-b-2 border-blue-600'
+                    : 'text-blue-600 hover:bg-blue-50'
+                }`}
+              >
+                📈 Percentages
+              </button>
+              <button
+                onClick={() => setActiveOptionsTab('colors')}
+                className={`px-4 py-2 text-xs font-medium transition-colors ${
+                  activeOptionsTab === 'colors'
+                    ? 'bg-blue-50 text-blue-800 border-b-2 border-blue-600'
+                    : 'text-blue-600 hover:bg-blue-50'
+                }`}
+              >
+                🎨 Colors
+              </button>
+            </div>
+            
+            <div className="p-4">
+              {/* Display Tab */}
+              {activeOptionsTab === 'display' && (
+                <div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <div>
             <label htmlFor="calculationType" className="block text-xs font-medium text-blue-700 mb-1">Calculation Type:</label>
@@ -767,38 +1179,32 @@ const PivotTable = ({ data, onReset, config, onConfigChange }) => {
           
           <div className="flex items-center">
             <input
-              id="conditionalFormatting"
+                        id="showColumnTotals"
               type="checkbox"
-              checked={conditionalFormatting}
-              onChange={(e) => setConditionalFormatting(e.target.checked)}
+                        checked={showColumnTotals}
+                        onChange={(e) => setShowColumnTotals(e.target.checked)}
               className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
             />
-            <label htmlFor="conditionalFormatting" className="ml-2 text-xs text-blue-700">Value Color Coding</label>
-          </div>
+                      <label htmlFor="showColumnTotals" className="ml-2 text-xs text-blue-700">Show Column Totals</label>
         </div>
         
-        {/* Advanced/Debug Options */}
-        <div className="mt-3 pt-3 border-t border-blue-200">
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-blue-700">Advanced Options:</span>
             <div className="flex items-center">
               <input
-                id="showDebugColumns"
+                        id="conditionalFormatting"
                 type="checkbox"
-                checked={showDebugColumns}
-                onChange={(e) => setShowDebugColumns(e.target.checked)}
+                        checked={conditionalFormatting}
+                        onChange={(e) => setConditionalFormatting(e.target.checked)}
                 className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
               />
-              <label htmlFor="showDebugColumns" className="ml-2 text-xs text-blue-700">Show Debug Columns</label>
-            </div>
+                      <label htmlFor="conditionalFormatting" className="ml-2 text-xs text-blue-700">Value Color Coding</label>
           </div>
         </div>
         
         {/* Expand/Collapse Controls */}
         {showSubtotals && (
-          <div className="mt-3 pt-3 border-t border-blue-200">
+                    <div className="mt-4 pt-3 border-t border-blue-200">
             <div className="flex items-center justify-between">
-              <span className="text-xs text-blue-700">Section Controls:</span>
+                        <span className="text-xs text-blue-700">Table Row Controls:</span>
               <div className="flex space-x-2">
                 <button
                   onClick={() => {
@@ -810,35 +1216,251 @@ const PivotTable = ({ data, onReset, config, onConfigChange }) => {
                   }}
                   className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
                 >
-                  Expand All
+                            Expand All Rows
                 </button>
                 <button
                   onClick={() => setExpandedSections(new Set())}
                   className="px-2 py-1 text-xs bg-gray-600 text-white rounded hover:bg-gray-700"
                 >
-                  Collapse All
+                            Collapse All Rows
                 </button>
               </div>
             </div>
           </div>
         )}
       </div>
+              )}
+              
+              {/* Sort & Filter Tab */}
+              {activeOptionsTab === 'sorting' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label htmlFor="sortBy" className="block text-xs font-medium text-blue-700 mb-1">Sort By:</label>
+                    <select 
+                      id="sortBy" 
+                      value={sortBy} 
+                      onChange={(e) => setSortBy(e.target.value)}
+                      className="block w-full px-2 py-1 text-xs border border-blue-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    >
+                      <option value="none">No Sorting</option>
+                      <option value="label-asc">Label (A → Z)</option>
+                      <option value="label-desc">Label (Z → A)</option>
+                      <option value="value-asc">Value (Low → High)</option>
+                      <option value="value-desc">Value (High → Low)</option>
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label htmlFor="topBottomFilter" className="block text-xs font-medium text-blue-700 mb-1">Top/Bottom Filter:</label>
+                    <select 
+                      id="topBottomFilter" 
+                      value={topBottomFilter} 
+                      onChange={(e) => setTopBottomFilter(e.target.value)}
+                      className="block w-full px-2 py-1 text-xs border border-blue-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    >
+                      <option value="none">Show All Items</option>
+                      <option value="top-5">Top 5 Items</option>
+                      <option value="top-10">Top 10 Items</option>
+                      <option value="top-20">Top 20 Items</option>
+                      <option value="bottom-5">Bottom 5 Items</option>
+                      <option value="bottom-10">Bottom 10 Items</option>
+                      <option value="bottom-20">Bottom 20 Items</option>
+                    </select>
+                  </div>
+                  
+                  <div className="md:col-span-2">
+                    <p className="text-xs text-blue-600 bg-blue-100 p-2 rounded">
+                      💡 Tip: Top/Bottom filter is based on the row total values. Use sorting to arrange the filtered results.
+                    </p>
+                  </div>
+                </div>
+              )}
+              
+              {/* Number Format Tab */}
+              {activeOptionsTab === 'format' && (
+                <div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div>
+                      <label htmlFor="decimalPlaces" className="block text-xs font-medium text-blue-700 mb-1">Decimal Places:</label>
+                      <select 
+                        id="decimalPlaces" 
+                        value={decimalPlaces} 
+                        onChange={(e) => setDecimalPlaces(parseInt(e.target.value))}
+                        className="block w-full px-2 py-1 text-xs border border-blue-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      >
+                        <option value="0">0 decimals (1,234)</option>
+                        <option value="1">1 decimal (1,234.5)</option>
+                        <option value="2">2 decimals (1,234.56)</option>
+                        <option value="3">3 decimals (1,234.567)</option>
+                      </select>
+                    </div>
+                    
+                    <div>
+                      <label htmlFor="currencySymbol" className="block text-xs font-medium text-blue-700 mb-1">Currency:</label>
+                      <select 
+                        id="currencySymbol" 
+                        value={currencySymbol} 
+                        onChange={(e) => setCurrencySymbol(e.target.value)}
+                        className="block w-full px-2 py-1 text-xs border border-blue-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      >
+                        <option value="none">None</option>
+                        <option value="$">$ (Dollar)</option>
+                        <option value="€">€ (Euro)</option>
+                        <option value="£">£ (Pound)</option>
+                        <option value="¥">¥ (Yen/Yuan)</option>
+                      </select>
+                    </div>
+                    
+                    <div className="flex items-center">
+                      <input
+                        id="showThousandsSeparator"
+                        type="checkbox"
+                        checked={showThousandsSeparator}
+                        onChange={(e) => setShowThousandsSeparator(e.target.checked)}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                      />
+                      <label htmlFor="showThousandsSeparator" className="ml-2 text-xs text-blue-700">Thousands Separator</label>
+                    </div>
+                    
+                    <div className="flex items-center text-xs text-blue-600">
+                      <span className="font-medium">Preview: {formatNumber(1234.567)}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {/* Percentages Tab */}
+              {activeOptionsTab === 'percentages' && (
+                <div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label htmlFor="percentageMode" className="block text-xs font-medium text-blue-700 mb-1">Show Values As:</label>
+                      <select 
+                        id="percentageMode" 
+                        value={percentageMode} 
+                        onChange={(e) => setPercentageMode(e.target.value)}
+                        className="block w-full px-2 py-1 text-xs border border-blue-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      >
+                        <option value="none">Raw Values</option>
+                        <option value="row-total">% of Row Total</option>
+                        <option value="column-total">% of Column Total</option>
+                        <option value="grand-total">% of Grand Total</option>
+                      </select>
+                    </div>
+                  </div>
+                  
+                  <div className="mt-4 p-3 bg-blue-100 rounded-lg">
+                    <p className="text-xs text-blue-800 mb-2"><strong>Understanding Percentage Modes:</strong></p>
+                    <ul className="text-xs text-blue-700 space-y-1">
+                      <li>• <strong>% of Row Total:</strong> Each cell shows what % it is of that row's total</li>
+                      <li>• <strong>% of Column Total:</strong> Each cell shows what % it is of that column's total</li>
+                      <li>• <strong>% of Grand Total:</strong> Each cell shows what % it is of the entire table total</li>
+                    </ul>
+                    <p className="text-xs text-blue-600 mt-2 italic">
+                      Note: Percentage mode is ignored when Calculation Type is set to "Percentage"
+                    </p>
+                  </div>
+                </div>
+              )}
+              
+              {/* Colors Tab */}
+              {activeOptionsTab === 'colors' && (
+                <div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label htmlFor="colorScaleMode" className="block text-xs font-medium text-blue-700 mb-1">Color Scale Mode:</label>
+                      <select 
+                        id="colorScaleMode" 
+                        value={colorScaleMode} 
+                        onChange={(e) => setColorScaleMode(e.target.value)}
+                        className="block w-full px-2 py-1 text-xs border border-blue-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      >
+                        <option value="none">No Color Scale</option>
+                        <option value="heatmap">Heat Map (Gradient)</option>
+                        <option value="threshold">Custom Thresholds</option>
+                      </select>
+                    </div>
+                  </div>
+                  
+                  {/* Threshold Settings */}
+                  {colorScaleMode === 'threshold' && (
+                    <div className="mt-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                      <h4 className="text-xs font-semibold text-gray-800 mb-3">Threshold Settings</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label htmlFor="thresholdGreen" className="block text-xs font-medium text-gray-700 mb-1">
+                            Green if ≥ (Good)
+                          </label>
+                          <input
+                            id="thresholdGreen"
+                            type="number"
+                            value={thresholdGreen}
+                            onChange={(e) => setThresholdGreen(parseFloat(e.target.value))}
+                            className="block w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          />
+                        </div>
+                        <div>
+                          <label htmlFor="thresholdRed" className="block text-xs font-medium text-gray-700 mb-1">
+                            Red if ≤ (Poor)
+                          </label>
+                          <input
+                            id="thresholdRed"
+                            type="number"
+                            value={thresholdRed}
+                            onChange={(e) => setThresholdRed(parseFloat(e.target.value))}
+                            className="block w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          />
+                        </div>
+                      </div>
+                      <p className="text-xs text-gray-600 mt-2">
+                        Values between red and green thresholds will be yellow.
+                      </p>
+                    </div>
+                  )}
+                  
+                  {/* Color Scale Examples */}
+                  <div className="mt-4 p-3 bg-blue-100 rounded-lg">
+                    <p className="text-xs text-blue-800 mb-2"><strong>Color Scale Modes:</strong></p>
+                    <ul className="text-xs text-blue-700 space-y-2">
+                      <li>
+                        • <strong>Heat Map:</strong> Automatic gradient coloring from red (lowest) through yellow to green (highest)
+                        <div className="mt-1 flex items-center space-x-1">
+                          <div className="w-12 h-4 bg-red-200 rounded text-[8px] flex items-center justify-center">Low</div>
+                          <div className="w-12 h-4 bg-orange-200 rounded"></div>
+                          <div className="w-12 h-4 bg-yellow-200 rounded text-[8px] flex items-center justify-center">Mid</div>
+                          <div className="w-12 h-4 bg-green-200 rounded"></div>
+                          <div className="w-12 h-4 bg-green-300 rounded text-[8px] flex items-center justify-center">High</div>
+                        </div>
+                      </li>
+                      <li>
+                        • <strong>Custom Thresholds:</strong> Define your own good/poor thresholds for business rules
+                        <div className="mt-1 flex items-center space-x-1">
+                          <div className="w-16 h-4 bg-red-200 rounded text-[8px] flex items-center justify-center">≤ Red</div>
+                          <div className="w-16 h-4 bg-yellow-100 rounded text-[8px] flex items-center justify-center">Between</div>
+                          <div className="w-16 h-4 bg-green-200 rounded text-[8px] flex items-center justify-center">≥ Green</div>
+                        </div>
+                      </li>
+                    </ul>
+                    <p className="text-xs text-blue-600 mt-2 italic">
+                      Note: Color scales only apply to data cells, not totals or subtotals.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
 
-      {/* Reset All Button */}
+      {/* Clear All Button */}
       {(rowColumns.some(col => col) || columnColumn || valueColumn || filterColumn || filterValue) && (
         <div className="mb-6">
           <button
-            onClick={() => {
-              setRowColumns(['']);
-              setColumnColumn('');
-              setValueColumn('');
-              setFilterColumn('');
-              setFilterValue('');
-              if (onReset) onReset();
-            }}
-            className="px-4 py-2 bg-gray-500 text-white text-sm font-medium rounded-md hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-colors duration-200"
+            onClick={clearAllSelections}
+            className="px-4 py-2 bg-red-500 text-white text-sm font-medium rounded-md hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors duration-200"
+            title="Clear all selections and reset to defaults"
           >
-            Reset All
+            🗑️ Clear All
           </button>
         </div>
       )}

@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import DrillDownModal from './DrillDownModal';
 
 const ChartPreview = ({ data, onReset, config, onConfigChange }) => {
   // Use external configuration if provided, otherwise use local state
@@ -8,6 +9,14 @@ const ChartPreview = ({ data, onReset, config, onConfigChange }) => {
   const [filterColumn, setFilterColumn] = useState(config?.filterColumn || '');
   const [filterValue, setFilterValue] = useState(config?.filterValue || '');
   const [expandedSections, setExpandedSections] = useState(config?.expandedSections || { chartGuide: false });
+  
+  // Drill-down modal state
+  const [drillDownModal, setDrillDownModal] = useState({
+    isOpen: false,
+    categoryName: '',
+    categoryValue: 0,
+    chartType: ''
+  });
 
   // Multiple charts support
   const [charts, setCharts] = useState([
@@ -21,7 +30,7 @@ const ChartPreview = ({ data, onReset, config, onConfigChange }) => {
       filterValue: '',
       // Customization options
       title: '',
-      colorScheme: 'default',
+      colorScheme: 'pastel',
       size: 'medium',
       showGrid: true,
       showLegend: true,
@@ -34,6 +43,23 @@ const ChartPreview = ({ data, onReset, config, onConfigChange }) => {
 
   // Get current active chart
   const activeChart = charts.find(chart => chart.id === activeChartId) || charts[0];
+
+  // Compute filtered data for drill-down modal based on active chart's filters
+  const filteredData = useMemo(() => {
+    if (!data || !data.rows) return data;
+
+    let filteredRows = data.rows;
+
+    // Apply filter if specified
+    if (activeChart.filterColumn && activeChart.filterValue) {
+      filteredRows = data.rows.filter(row => row[activeChart.filterColumn] === activeChart.filterValue);
+    }
+
+    return {
+      ...data,
+      rows: filteredRows
+    };
+  }, [data, activeChart.filterColumn, activeChart.filterValue]);
 
   // Update local state when external config changes
   useEffect(() => {
@@ -74,7 +100,7 @@ const ChartPreview = ({ data, onReset, config, onConfigChange }) => {
       filterValue: '',
       // Customization options
       title: '',
-      colorScheme: 'default',
+      colorScheme: 'pastel',
       size: 'medium',
       showGrid: true,
       showLegend: true,
@@ -105,9 +131,28 @@ const ChartPreview = ({ data, onReset, config, onConfigChange }) => {
     ));
   };
 
-  // Rename chart
-  const renameChart = (chartId, newName) => {
-    updateChart(chartId, { name: newName });
+  // Rename chart (available for future use)
+  // const renameChart = (chartId, newName) => {
+  //   updateChart(chartId, { name: newName });
+  // };
+
+  // Drill-down handlers
+  const handleDrillDown = (categoryName, categoryValue, chartType) => {
+    setDrillDownModal({
+      isOpen: true,
+      categoryName,
+      categoryValue,
+      chartType
+    });
+  };
+
+  const closeDrillDownModal = () => {
+    setDrillDownModal({
+      isOpen: false,
+      categoryName: '',
+      categoryValue: 0,
+      chartType: ''
+    });
   };
 
   // Reset all charts
@@ -122,7 +167,7 @@ const ChartPreview = ({ data, onReset, config, onConfigChange }) => {
       filterValue: '',
       // Customization options
       title: '',
-      colorScheme: 'default',
+      colorScheme: 'pastel',
       size: 'medium',
       showGrid: true,
       showLegend: true,
@@ -134,8 +179,8 @@ const ChartPreview = ({ data, onReset, config, onConfigChange }) => {
     if (onReset) onReset();
   };
   
-  // Get columns from data
-  const columns = data.headers || [];
+  // Get columns from data (available for future use)
+  // const columns = data.headers || [];
 
   // Get filter values for the selected filter column
   const filterValues = useMemo(() => {
@@ -169,7 +214,7 @@ const ChartPreview = ({ data, onReset, config, onConfigChange }) => {
       });
 
       return Object.entries(counts)
-        .map(([name, value]) => ({ name, value }))
+        .map(([name, value]) => ({ name: String(name), value })) // Ensure name is a string
         .sort((a, b) => b.value - a.value);
     } else if (activeChart.chartType === 'line' || activeChart.chartType === 'scatter') {
       // For line and scatter charts, need both X and Y columns
@@ -178,10 +223,15 @@ const ChartPreview = ({ data, onReset, config, onConfigChange }) => {
       return filteredRows
         .filter(row => row[activeChart.categoryColumn] && row[activeChart.valueColumn])
         .map(row => ({
-          name: row[activeChart.categoryColumn],
+          name: String(row[activeChart.categoryColumn]), // Ensure name is a string
           value: parseFloat(row[activeChart.valueColumn]) || 0
         }))
-        .sort((a, b) => a.name.localeCompare(b.name));
+        .sort((a, b) => {
+          // Ensure both names are strings and handle edge cases
+          const nameA = String(a.name || '');
+          const nameB = String(b.name || '');
+          return nameA.localeCompare(nameB);
+        });
     } else if (activeChart.chartType === 'histogram') {
       // For histogram, need numeric data
       const numericValues = filteredRows
@@ -243,10 +293,10 @@ const ChartPreview = ({ data, onReset, config, onConfigChange }) => {
   // Get chart dimensions based on size setting
   const getChartDimensions = () => {
     const sizeMap = {
-      'small': { width: 300, height: 300 },
-      'medium': { width: 400, height: 400 },
-      'large': { width: 500, height: 500 },
-      'extra-large': { width: 600, height: 600 }
+      'small': { width: 400, height: 350 },
+      'medium': { width: 500, height: 450 },
+      'large': { width: 600, height: 550 },
+      'extra-large': { width: 700, height: 650 }
     };
     return sizeMap[activeChart.size] || sizeMap.medium;
   };
@@ -304,45 +354,80 @@ const ChartPreview = ({ data, onReset, config, onConfigChange }) => {
     return (
       <div className="w-full bg-white p-4 rounded-lg border border-gray-200" data-chart-type="pie">
         <h4 className="text-center font-bold mb-4 text-gray-800">{chartTitle}</h4>
-        <svg width={width} height={height} className="mx-auto">
-          {slices.map((slice, index) => (
-            <g key={index}>
-              <path
-                d={slice.path}
-                fill={colors[index % colors.length]}
-                stroke="white"
-                strokeWidth="2"
-              />
-              {/* Add labels for larger slices */}
-              {slice.percentage > 0.1 && (
-                <text
-                  x={centerX + (radius * 0.7) * Math.cos(slice.startAngle + (slice.endAngle - slice.startAngle) / 2)}
-                  y={centerY + (radius * 0.7) * Math.sin(slice.startAngle + (slice.endAngle - slice.startAngle) / 2)}
-                  textAnchor="middle"
-                  dominantBaseline="middle"
-                  fontSize="14"
-                  fill="white"
-                  fontWeight="bold"
-                >
-                  {Math.round(slice.percentage * 100)}%
-                </text>
-              )}
-            </g>
-          ))}
-        </svg>
         
-        {/* Legend */}
-        <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
-          {chartData.map((item, index) => (
-            <div key={index} className="flex items-center space-x-2">
-              <div 
-                className="w-4 h-4 rounded"
-                                    style={{ backgroundColor: colors[index % colors.length] }}
-              ></div>
-              <span className="truncate">{item.name}</span>
-              <span className="font-bold">({item.value})</span>
+        <div className={`flex ${
+          activeChart.legendPosition === 'left' ? 'flex-row-reverse' :
+          activeChart.legendPosition === 'right' ? 'flex-row' :
+          activeChart.legendPosition === 'top' ? 'flex-col-reverse' :
+          'flex-col'
+        } items-center justify-center gap-6`}>
+          
+          {/* Chart SVG */}
+          <div className="flex-shrink-0">
+            <svg width={width} height={height}>
+              {slices.map((slice, index) => (
+                <g key={`${index}-${activeChart.colorScheme}`}>
+                  <path
+                    d={slice.path}
+                    fill={colors[index % colors.length]}
+                    stroke="white"
+                    strokeWidth="2"
+                    style={{ cursor: 'pointer', transition: 'opacity 0.2s' }}
+                    onClick={() => handleDrillDown(slice.item.name, slice.item.value, 'pie')}
+                    onMouseEnter={(e) => {
+                      e.target.style.opacity = '0.8';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.target.style.opacity = '1';
+                    }}
+                  />
+                  {/* Add labels for larger slices */}
+                  {slice.percentage > 0.1 && (
+                    <text
+                      x={centerX + (radius * 0.7) * Math.cos(slice.startAngle + (slice.endAngle - slice.startAngle) / 2)}
+                      y={centerY + (radius * 0.7) * Math.sin(slice.startAngle + (slice.endAngle - slice.startAngle) / 2)}
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                      fontSize="14"
+                      fill="white"
+                      fontWeight="bold"
+                      style={{ cursor: 'pointer' }}
+                      onClick={() => handleDrillDown(slice.item.name, slice.item.value, 'pie')}
+                    >
+                      {Math.round(slice.percentage * 100)}%
+                    </text>
+                  )}
+                </g>
+              ))}
+            </svg>
+          </div>
+          
+          {/* Legend */}
+          {activeChart.showLegend && (
+            <div className="flex-shrink-0">
+              <div className={`grid gap-2 ${
+                activeChart.legendPosition === 'right' || activeChart.legendPosition === 'left' 
+                  ? 'grid-cols-1' 
+                  : 'grid-cols-2'
+              }`}>
+                {chartData.map((item, index) => (
+                  <div 
+                    key={index} 
+                    className="flex items-center space-x-2 cursor-pointer hover:bg-gray-100 p-1 rounded transition-colors"
+                    onClick={() => handleDrillDown(item.name, item.value, 'pie')}
+                    title="Click to drill down"
+                  >
+                    <div 
+                      className="w-4 h-4 rounded"
+                      style={{ backgroundColor: colors[index % colors.length] }}
+                    ></div>
+                    <span className="truncate">{item.name}</span>
+                    <span className="font-bold">({item.value})</span>
+                  </div>
+                ))}
+              </div>
             </div>
-          ))}
+          )}
         </div>
       </div>
     );
@@ -368,51 +453,100 @@ const ChartPreview = ({ data, onReset, config, onConfigChange }) => {
     return (
       <div className="w-full bg-white p-4 rounded-lg border border-gray-200" data-chart-type="bar">
         <h4 className="text-center font-bold mb-4 text-gray-800">{chartTitle}</h4>
-        <svg width={width} height={height} className="mx-auto">
-          {/* Y-axis */}
-          <line x1="60" y1="50" x2="60" y2={height - 30} stroke="black" strokeWidth="2" />
-          <line x1="60" y1={height - 30} x2={width - 20} y2={height - 30} stroke="black" strokeWidth="2" />
+        
+        <div className={`flex ${
+          activeChart.legendPosition === 'left' ? 'flex-row-reverse' :
+          activeChart.legendPosition === 'right' ? 'flex-row' :
+          activeChart.legendPosition === 'top' ? 'flex-col-reverse' :
+          'flex-col'
+        } items-center justify-center gap-6`}>
           
-          {/* Bars */}
-          {chartData.map((item, index) => {
-            const x = 80 + (index * (barWidth + barSpacing));
-            const barHeight = item.value * scale;
-            const y = height - 30 - barHeight;
-            
-            return (
-              <g key={index}>
-                <rect
-                  x={x}
-                  y={y}
-                  width={barWidth}
-                  height={barHeight}
-                  fill={colors[index % colors.length]}
-                  stroke="white"
-                  strokeWidth="1"
-                />
-                <text
-                  x={x + barWidth / 2}
-                  y={height - 5}
-                  textAnchor="middle"
-                  fontSize="5"
-                  fill="black"
-                >
-                  {item.name.length > 4 ? item.name.substring(0, 4) + '...' : item.name}
-                </text>
-                <text
-                  x={x + barWidth / 2}
-                  y={y - 5}
-                  textAnchor="middle"
-                  fontSize="5"
-                  fill="black"
-                  fontWeight="bold"
-                >
-                  {item.value}
-                </text>
-              </g>
-            );
-          })}
-        </svg>
+          {/* Chart SVG */}
+          <div className="flex-shrink-0">
+            <svg width={width} height={height}>
+              {/* Y-axis */}
+              <line x1="60" y1="50" x2="60" y2={height - 30} stroke="black" strokeWidth="2" />
+              <line x1="60" y1={height - 30} x2={width - 20} y2={height - 30} stroke="black" strokeWidth="2" />
+              
+              {/* Bars */}
+              {chartData.map((item, index) => {
+                const x = 80 + (index * (barWidth + barSpacing));
+                const barHeight = item.value * scale;
+                const y = height - 30 - barHeight;
+                
+                return (
+                  <g key={`${index}-${activeChart.colorScheme}`}>
+                    <rect
+                      x={x}
+                      y={y}
+                      width={barWidth}
+                      height={barHeight}
+                      fill={colors[index % colors.length]}
+                      stroke="white"
+                      strokeWidth="1"
+                      style={{ cursor: 'pointer' }}
+                      onClick={() => handleDrillDown(item.name, item.value, 'bar')}
+                      onMouseEnter={(e) => {
+                        e.target.style.fill = colors[index % colors.length];
+                        e.target.style.opacity = '0.8';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.target.style.fill = colors[index % colors.length];
+                        e.target.style.opacity = '1';
+                      }}
+                    />
+                    <text
+                      x={x + barWidth / 2}
+                      y={height - 5}
+                      textAnchor="middle"
+                      fontSize="5"
+                      fill="black"
+                    >
+                      {item.name.length > 4 ? item.name.substring(0, 4) + '...' : item.name}
+                    </text>
+                    <text
+                      x={x + barWidth / 2}
+                      y={y - 5}
+                      textAnchor="middle"
+                      fontSize="5"
+                      fill="black"
+                      fontWeight="bold"
+                    >
+                      {item.value}
+                    </text>
+                  </g>
+                );
+              })}
+            </svg>
+          </div>
+          
+          {/* Legend */}
+          {activeChart.showLegend && (
+            <div className="flex-shrink-0">
+              <div className={`grid gap-2 ${
+                activeChart.legendPosition === 'right' || activeChart.legendPosition === 'left' 
+                  ? 'grid-cols-1' 
+                  : 'grid-cols-2'
+              }`}>
+                {chartData.map((item, index) => (
+                  <div 
+                    key={index} 
+                    className="flex items-center space-x-2 cursor-pointer hover:bg-gray-100 p-1 rounded transition-colors"
+                    onClick={() => handleDrillDown(item.name, item.value, 'bar')}
+                    title="Click to drill down"
+                  >
+                    <div 
+                      className="w-4 h-4 rounded"
+                      style={{ backgroundColor: colors[index % colors.length] }}
+                    ></div>
+                    <span className="truncate">{item.name}</span>
+                    <span className="font-bold">({item.value})</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     );
   };
@@ -448,7 +582,7 @@ const ChartPreview = ({ data, onReset, config, onConfigChange }) => {
             const y = height - 30 - barHeight;
             
             return (
-              <g key={index}>
+              <g key={`${index}-${activeChart.colorScheme}`}>
                 <rect
                   x={x}
                   y={y}
@@ -489,11 +623,14 @@ const ChartPreview = ({ data, onReset, config, onConfigChange }) => {
   const renderLineChart = () => {
     if (!chartData || chartData.length === 0) return null;
     
+    // Debug logging
+    console.log('Line chart data:', chartData);
+    console.log('Chart dimensions:', getChartDimensions());
+    
     const dimensions = getChartDimensions();
     const width = dimensions.width;
     const height = dimensions.height;
-    const colors = getChartColors();
-    const padding = 50;
+    const padding = 70; // Adjusted padding for better label visibility
     const chartWidth = width - (padding * 2);
     const chartHeight = height - (padding * 2);
     
@@ -504,23 +641,89 @@ const ChartPreview = ({ data, onReset, config, onConfigChange }) => {
     // Calculate scales
     const xValues = chartData.map((_, index) => index);
     const yValues = chartData.map(item => item.value);
+    const yMin = Math.min(...yValues);
+    const yMax = Math.max(...yValues);
+    const yRange = yMax - yMin || 1; // Prevent division by zero
+    
     const xScale = chartWidth / (xValues.length - 1);
-    const yScale = chartHeight / (Math.max(...yValues) - Math.min(...yValues));
+    const yScale = chartHeight / yRange;
     
     // Generate path data
     const pathData = chartData.map((item, index) => {
       const x = padding + (index * xScale);
-      const y = padding + chartHeight - ((item.value - Math.min(...yValues)) * yScale);
+      const y = padding + chartHeight - ((item.value - yMin) * yScale);
       return `${index === 0 ? 'M' : 'L'} ${x} ${y}`;
     }).join(' ');
 
-  return (
+    return (
       <div className="w-full bg-white p-4 rounded-lg border border-gray-200" data-chart-type="line">
         <h4 className="text-center font-bold mb-4 text-gray-800">{chartTitle}</h4>
-        <svg width={width} height={height} className="mx-auto">
+        {/* Debug info */}
+        <div className="text-xs text-gray-500 mb-2">
+          Chart dimensions: {width}x{height}, Padding: {padding}, Data points: {chartData.length}
+        </div>
+        <svg width={width} height={height} className="mx-auto" style={{ backgroundColor: '#f9fafb' }}>
+          {/* Grid lines (if enabled) */}
+          {activeChart.showGrid && (
+            <>
+              {/* Vertical grid lines */}
+              {chartData.map((_, index) => {
+                const x = padding + (index * xScale);
+                return (
+                  <line
+                    key={`v-grid-${index}`}
+                    x1={x}
+                    y1={padding}
+                    x2={x}
+                    y2={height - padding}
+                    stroke="#e5e7eb"
+                    strokeWidth="1"
+                    strokeDasharray="2,2"
+                  />
+                );
+              })}
+              {/* Horizontal grid lines */}
+              {Array.from({ length: 6 }, (_, i) => {
+                const y = padding + (i * chartHeight / 5);
+                return (
+                  <line
+                    key={`h-grid-${i}`}
+                    x1={padding}
+                    y1={y}
+                    x2={width - padding}
+                    y2={y}
+                    stroke="#e5e7eb"
+                    strokeWidth="1"
+                    strokeDasharray="2,2"
+                  />
+                );
+              })}
+            </>
+          )}
+          
           {/* Axes */}
           <line x1={padding} y1={padding} x2={padding} y2={height - padding} stroke="black" strokeWidth="2" />
           <line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} stroke="black" strokeWidth="2" />
+          
+          {/* Y-axis labels and ticks */}
+          {Array.from({ length: 6 }, (_, i) => {
+            const y = padding + (i * chartHeight / 5);
+            const value = yMax - (i * yRange / 5);
+            return (
+              <g key={`y-tick-${i}`}>
+                <line x1={padding - 5} y1={y} x2={padding} y2={y} stroke="black" strokeWidth="1" />
+                <text
+                  x={padding - 10}
+                  y={y + 4}
+                  textAnchor="end"
+                  fontSize="12"
+                  fill="black"
+                >
+                  {value.toFixed(1)}
+                </text>
+              </g>
+            );
+          })}
           
           {/* Line */}
           <path d={pathData} stroke="#8884d8" strokeWidth="3" fill="none" />
@@ -528,20 +731,21 @@ const ChartPreview = ({ data, onReset, config, onConfigChange }) => {
           {/* Data points */}
           {chartData.map((item, index) => {
             const x = padding + (index * xScale);
-            const y = padding + chartHeight - ((item.value - Math.min(...yValues)) * yScale);
+            const y = padding + chartHeight - ((item.value - yMin) * yScale);
             
             return (
-              <g key={index}>
-                <circle cx={x} cy={y} r="4" fill="#8884d8" stroke="white" strokeWidth="2" />
+              <g key={`${index}-${activeChart.colorScheme}`}>
+                <circle cx={x} cy={y} r="5" fill="#8884d8" stroke="white" strokeWidth="2" />
+                {/* Data point value label */}
                 <text
                   x={x}
-                  y={y - 8}
+                  y={y - 10}
                   textAnchor="middle"
-                  fontSize="5"
-                  fill="black"
-                  fontWeight="bold"
+                  fontSize="11"
+                  fill="#374151"
+                  fontWeight="500"
                 >
-                  {item.value}
+                  {item.value.toFixed(1)}
                 </text>
               </g>
             );
@@ -551,18 +755,51 @@ const ChartPreview = ({ data, onReset, config, onConfigChange }) => {
           {chartData.map((item, index) => {
             const x = padding + (index * xScale);
             return (
-              <text
-                key={index}
-                x={x}
-                y={height - 5}
-                textAnchor="middle"
-                fontSize="5"
-                fill="black"
-              >
-                {item.name.length > 4 ? item.name.substring(0, 4) + '...' : item.name}
-              </text>
+              <g key={`x-label-${index}`}>
+                {/* Tick mark */}
+                <line x1={x} y1={height - padding} x2={x} y2={height - padding + 8} stroke="black" strokeWidth="2" />
+                {/* Label */}
+                <text
+                  x={x}
+                  y={height - padding + 30}
+                  textAnchor="middle"
+                  fontSize="13"
+                  fill="#1f2937"
+                  fontWeight="600"
+                >
+                  {item.name}
+                </text>
+              </g>
             );
           })}
+          
+          {/* Axis titles */}
+          {activeChart.xAxisLabel && (
+            <text
+              x={width / 2}
+              y={height - 10}
+              textAnchor="middle"
+              fontSize="14"
+              fill="black"
+              fontWeight="500"
+            >
+              {activeChart.xAxisLabel}
+            </text>
+          )}
+          
+          {activeChart.yAxisLabel && (
+            <text
+              x={20}
+              y={height / 2}
+              textAnchor="middle"
+              fontSize="14"
+              fill="black"
+              fontWeight="500"
+              transform={`rotate(-90, 20, ${height / 2})`}
+            >
+              {activeChart.yAxisLabel}
+            </text>
+          )}
         </svg>
       </div>
     );
@@ -576,7 +813,7 @@ const ChartPreview = ({ data, onReset, config, onConfigChange }) => {
     const width = dimensions.width;
     const height = dimensions.height;
     const colors = getChartColors();
-    const padding = 50;
+    const padding = 60;
     const chartWidth = width - (padding * 2);
     const chartHeight = height - (padding * 2);
     
@@ -584,45 +821,186 @@ const ChartPreview = ({ data, onReset, config, onConfigChange }) => {
       ? `Scatter Plot (Filtered: ${filterColumn} = ${filterValue})`
       : 'Scatter Plot');
     
-    // Calculate scales
+    // Calculate scales with proper handling for edge cases
     const xValues = chartData.map(item => parseFloat(item.name) || 0);
     const yValues = chartData.map(item => item.value);
-    const xMin = Math.min(...xValues);
-    const xMax = Math.max(...xValues);
-    const yMin = Math.min(...yValues);
-    const yMax = Math.max(...yValues);
     
-    const xScale = chartWidth / (xMax - xMin);
-    const yScale = chartHeight / (yMax - yMin);
+    // Filter out invalid values
+    const validXValues = xValues.filter(v => !isNaN(v) && isFinite(v));
+    const validYValues = yValues.filter(v => !isNaN(v) && isFinite(v));
+    
+    if (validXValues.length === 0 || validYValues.length === 0) {
+      return (
+        <div className="w-full bg-white p-4 rounded-lg border border-gray-200" data-chart-type="scatter">
+          <h4 className="text-center font-bold mb-4 text-gray-800">{chartTitle}</h4>
+          <div className="text-center text-red-500 py-8">
+            Invalid data for scatter plot. Both X and Y values must be numeric.
+          </div>
+        </div>
+      );
+    }
+    
+    const xMin = Math.min(...validXValues);
+    const xMax = Math.max(...validXValues);
+    const yMin = Math.min(...validYValues);
+    const yMax = Math.max(...validYValues);
+    
+    // Handle case where all values are the same
+    const xRange = xMax - xMin || 1;
+    const yRange = yMax - yMin || 1;
+    
+    const xScale = chartWidth / xRange;
+    const yScale = chartHeight / yRange;
+    
+    // Add some padding to the data range for better visualization
+    const xPadding = xRange * 0.1;
+    const yPadding = yRange * 0.1;
     
     return (
       <div className="w-full bg-white p-4 rounded-lg border border-gray-200" data-chart-type="scatter">
         <h4 className="text-center font-bold mb-4 text-gray-800">{chartTitle}</h4>
         <svg width={width} height={height} className="mx-auto">
+          {/* Grid lines */}
+          {activeChart.showGrid && (
+            <g>
+              {[0, 1, 2, 3, 4].map(i => (
+                <g key={i}>
+                  <line
+                    x1={padding}
+                    y1={padding + (chartHeight * i / 4)}
+                    x2={width - padding}
+                    y2={padding + (chartHeight * i / 4)}
+                    stroke="#e5e7eb"
+                    strokeWidth="1"
+                  />
+                  <line
+                    x1={padding + (chartWidth * i / 4)}
+                    y1={padding}
+                    x2={padding + (chartWidth * i / 4)}
+                    y2={height - padding}
+                    stroke="#e5e7eb"
+                    strokeWidth="1"
+                  />
+                </g>
+              ))}
+            </g>
+          )}
+          
           {/* Axes */}
           <line x1={padding} y1={padding} x2={padding} y2={height - padding} stroke="black" strokeWidth="2" />
           <line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} stroke="black" strokeWidth="2" />
           
-          {/* Data points */}
-          {chartData.map((item, index) => {
-            const x = padding + ((parseFloat(item.name) - xMin) * xScale);
-            const y = padding + chartHeight - ((item.value - yMin) * yScale);
-            
+          {/* Axis ticks and labels */}
+          {[0, 1, 2, 3, 4].map(i => {
+            const xValue = xMin + (xRange * i / 4);
+            const yValue = yMin + (yRange * i / 4);
             return (
-              <g key={index}>
-                <circle cx={x} cy={y} r="4" fill={colors[index % colors.length]} stroke="white" strokeWidth="1" />
+              <g key={i}>
+                {/* X-axis ticks */}
+                <line
+                  x1={padding + (chartWidth * i / 4)}
+                  y1={height - padding}
+                  x2={padding + (chartWidth * i / 4)}
+                  y2={height - padding + 5}
+                  stroke="black"
+                  strokeWidth="2"
+                />
                 <text
-                  x={x}
-                  y={y - 8}
+                  x={padding + (chartWidth * i / 4)}
+                  y={height - padding + 20}
                   textAnchor="middle"
-                  fontSize="5"
+                  fontSize="10"
                   fill="black"
                 >
-                  {item.value}
+                  {xValue.toFixed(1)}
+                </text>
+                
+                {/* Y-axis ticks */}
+                <line
+                  x1={padding - 5}
+                  y1={height - padding - (chartHeight * i / 4)}
+                  x2={padding}
+                  y2={height - padding - (chartHeight * i / 4)}
+                  stroke="black"
+                  strokeWidth="2"
+                />
+                <text
+                  x={padding - 10}
+                  y={height - padding - (chartHeight * i / 4) + 4}
+                  textAnchor="end"
+                  fontSize="10"
+                  fill="black"
+                >
+                  {yValue.toFixed(1)}
                 </text>
               </g>
             );
           })}
+          
+          {/* Data points */}
+          {chartData.map((item, index) => {
+            const xVal = parseFloat(item.name);
+            const yVal = item.value;
+            
+            // Skip invalid points
+            if (isNaN(xVal) || isNaN(yVal) || !isFinite(xVal) || !isFinite(yVal)) {
+              return null;
+            }
+            
+            const x = padding + ((xVal - xMin) * xScale);
+            const y = height - padding - ((yVal - yMin) * yScale);
+            
+            return (
+              <g key={`${index}-${activeChart.colorScheme}`}>
+                <circle 
+                  cx={x} 
+                  cy={y} 
+                  r="6" 
+                  fill={colors[0]} 
+                  opacity="0.7"
+                  stroke="white" 
+                  strokeWidth="2"
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => handleDrillDown(String(xVal), yVal, 'scatter')}
+                  onMouseEnter={(e) => {
+                    e.target.style.opacity = '1';
+                    e.target.setAttribute('r', '8');
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.opacity = '0.7';
+                    e.target.setAttribute('r', '6');
+                  }}
+                />
+              </g>
+            );
+          })}
+          
+          {/* Axis labels */}
+          {activeChart.xAxisLabel && (
+            <text
+              x={width / 2}
+              y={height - 10}
+              textAnchor="middle"
+              fontSize="14"
+              fill="black"
+              fontWeight="500"
+            >
+              {activeChart.xAxisLabel}
+            </text>
+          )}
+          {activeChart.yAxisLabel && (
+            <text
+              x={20}
+              y={height / 2}
+              textAnchor="middle"
+              fontSize="14"
+              fill="black"
+              fontWeight="500"
+              transform={`rotate(-90, 20, ${height / 2})`}
+            >
+              {activeChart.yAxisLabel}
+            </text>
+          )}
         </svg>
       </div>
     );
@@ -759,12 +1137,12 @@ const ChartPreview = ({ data, onReset, config, onConfigChange }) => {
             onChange={(e) => updateChart(activeChartId, { colorScheme: e.target.value })}
             className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
           >
-            <option value="default">Default Blue</option>
+            <option value="pastel">Pastel Colors</option>
+            <option value="default">Blue</option>
             <option value="warm">Warm Colors</option>
             <option value="cool">Cool Colors</option>
             <option value="earth">Earth Tones</option>
             <option value="vibrant">Vibrant Colors</option>
-            <option value="pastel">Pastel Colors</option>
             <option value="monochrome">Monochrome</option>
           </select>
         </div>
@@ -812,6 +1190,7 @@ const ChartPreview = ({ data, onReset, config, onConfigChange }) => {
                   className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
                 >
                   <option value="right">Right</option>
+                  <option value="left">Left</option>
                   <option value="bottom">Bottom</option>
                   <option value="top">Top</option>
                 </select>
@@ -894,7 +1273,7 @@ const ChartPreview = ({ data, onReset, config, onConfigChange }) => {
         {(activeChart.chartType === 'pie' || activeChart.chartType === 'bar' || activeChart.chartType === 'line' || activeChart.chartType === 'scatter') && (
           <div className="bg-gray-50 p-4 rounded-lg">
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              {activeChart.chartType === 'line' || activeChart.chartType === 'scatter' ? 'Y-Axis Column' : 'Value Column'}
+              {activeChart.chartType === 'line' || activeChart.chartType === 'scatter' ? 'Y-Axis Column' : 'Value Column (Optional)'}
             </label>
             <select
               value={activeChart.valueColumn}
@@ -1126,6 +1505,18 @@ const ChartPreview = ({ data, onReset, config, onConfigChange }) => {
         </div>
       )}
       </div>
+
+      {/* Drill Down Modal */}
+      <DrillDownModal
+        isOpen={drillDownModal.isOpen}
+        onClose={closeDrillDownModal}
+        categoryName={drillDownModal.categoryName}
+        categoryValue={drillDownModal.categoryValue}
+        rawData={filteredData}
+        categoryColumn={activeChart.categoryColumn}
+        valueColumn={activeChart.valueColumn}
+        chartType={drillDownModal.chartType}
+      />
     </div>
   );
 };

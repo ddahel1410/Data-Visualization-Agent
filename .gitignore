@@ -60,3 +60,9 @@ jspm_packages/
 
 # Yarn Integrity file
 .yarn-integrity
+
+# Distribution packages (generated, not source code)
+Analyst-Agent-Distribution/
+Analyst-Agent-Distribution-Old.zip
+Analyst-Agent-Distribution.zip
+Data_Visualization_Agent_Build_*.zip

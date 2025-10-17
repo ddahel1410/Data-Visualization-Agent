@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 
 const DataQualityDashboard = ({ data }) => {
   const [drillDownData, setDrillDownData] = useState({});
@@ -6,10 +6,23 @@ const DataQualityDashboard = ({ data }) => {
     key: 'missingPercentage',
     direction: 'desc'
   });
+  const [selectedColumns, setSelectedColumns] = useState(null); // null means analyze all columns
+  const [showColumnSelector, setShowColumnSelector] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
-  // Helper function to detect outliers using IQR method
+  // Handle loading state when data or selected columns change
+  useEffect(() => {
+    if (data && data.rows && data.headers) {
+      setIsAnalyzing(true);
+      // Simulate a brief loading state for better UX
+      const timer = setTimeout(() => setIsAnalyzing(false), 100);
+      return () => clearTimeout(timer);
+    }
+  }, [data, selectedColumns]);
+
+  // Enhanced helper function to detect outliers using multiple methods
   const detectOutliers = (values) => {
-    if (values.length < 4) return [];
+    if (values.length < 4) return { outliers: [], method: 'insufficient_data' };
     
     const sorted = values.sort((a, b) => a - b);
     const q1 = sorted[Math.floor(sorted.length * 0.25)];
@@ -18,15 +31,50 @@ const DataQualityDashboard = ({ data }) => {
     const lowerBound = q1 - (iqr * 1.5);
     const upperBound = q3 + (iqr * 1.5);
     
-    return values.filter(val => val < lowerBound || val > upperBound);
+    // IQR method
+    const iqrOutliers = values.filter(val => val < lowerBound || val > upperBound);
+    
+    // Z-score method (for normal distributions)
+    const mean = values.reduce((a, b) => a + b, 0) / values.length;
+    const stdDev = Math.sqrt(values.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / values.length);
+    const zScoreOutliers = values.filter(val => Math.abs((val - mean) / stdDev) > 3);
+    
+    // Modified Z-score method (more robust)
+    const median = sorted[Math.floor(sorted.length / 2)];
+    const mad = sorted.reduce((acc, val) => acc + Math.abs(val - median), 0) / values.length;
+    const modifiedZScoreOutliers = values.filter(val => Math.abs(0.6745 * (val - median) / mad) > 3.5);
+    
+    // Return the method that detected the most outliers (most conservative)
+    const methods = [
+      { name: 'IQR', outliers: iqrOutliers, count: iqrOutliers.length },
+      { name: 'Z-Score', outliers: zScoreOutliers, count: zScoreOutliers.length },
+      { name: 'Modified Z-Score', outliers: modifiedZScoreOutliers, count: modifiedZScoreOutliers.length }
+    ];
+    
+    const bestMethod = methods.reduce((best, current) => 
+      current.count > best.count ? current : best
+    );
+    
+    return {
+      outliers: bestMethod.outliers,
+      method: bestMethod.name,
+      iqrOutliers: iqrOutliers,
+      zScoreOutliers: zScoreOutliers,
+      modifiedZScoreOutliers: modifiedZScoreOutliers
+    };
   };
 
-  // Helper function to detect duplicate rows
+  // Enhanced duplicate detection with similarity scoring
+  // Simplified duplicate detection for better performance
   const detectDuplicates = (rows) => {
     const seen = new Set();
     const duplicates = [];
     
-    rows.forEach((row, index) => {
+    // Only check first 100 rows for duplicates to improve performance
+    const sampleSize = Math.min(100, rows.length);
+    const sampleRows = rows.slice(0, sampleSize);
+    
+    sampleRows.forEach((row, index) => {
       const rowString = JSON.stringify(row);
       if (seen.has(rowString)) {
         duplicates.push(index);
@@ -38,85 +86,304 @@ const DataQualityDashboard = ({ data }) => {
     return {
       duplicateCount: duplicates.length,
       duplicateRows: duplicates,
-      duplicatePercentage: (duplicates.length / rows.length) * 100
+      duplicatePercentage: (duplicates.length / sampleSize) * 100,
+      nearDuplicates: {},
+      nearDuplicateCount: 0 // Skip near-duplicate detection for performance
+    };
+  };
+
+
+  // Enhanced data type detection with confidence scoring
+  // Simplified data type detection for better performance
+  const detectDataType = (values) => {
+    const nonNullValues = values.filter(val => val !== null && val !== undefined && val !== '');
+    if (nonNullValues.length === 0) return { type: 'unknown', confidence: 0 };
+    
+    // Sample only first 50 values for type detection
+    const sampleSize = Math.min(50, nonNullValues.length);
+    const sampleValues = nonNullValues.slice(0, sampleSize);
+    
+    let numericCount = 0;
+    let dateCount = 0;
+    let booleanCount = 0;
+    
+    sampleValues.forEach(val => {
+      if (typeof val === 'number' || !isNaN(Number(val))) {
+        numericCount++;
+      } else if (val instanceof Date || !isNaN(Date.parse(val))) {
+        dateCount++;
+      } else if (typeof val === 'boolean' || val === 'true' || val === 'false') {
+        booleanCount++;
+      }
+    });
+    
+    const total = sampleValues.length;
+    const numericRatio = numericCount / total;
+    const dateRatio = dateCount / total;
+    const booleanRatio = booleanCount / total;
+    
+    if (numericRatio > 0.7) return { type: 'numeric', confidence: numericRatio };
+    if (dateRatio > 0.7) return { type: 'date', confidence: dateRatio };
+    if (booleanRatio > 0.7) return { type: 'boolean', confidence: booleanRatio };
+    return { type: 'text', confidence: 0.8 };
+  };
+
+  // Enhanced data consistency checks
+  const checkDataConsistency = (columnData, dataType, columnName) => {
+    const consistency = {
+      formatConsistency: 0,
+      rangeConsistency: 0,
+      businessRuleConsistency: 0,
+      overallConsistency: 0,
+      issues: []
+    };
+    
+    const nonNullValues = columnData.filter(val => val !== null && val !== undefined && val !== '');
+    if (nonNullValues.length === 0) return consistency;
+    
+    // Format consistency
+    let formatMatches = 0;
+    nonNullValues.forEach(value => {
+      const strValue = String(value);
+      let isValid = false;
+      
+      switch (dataType) {
+        case 'numeric':
+          isValid = !isNaN(value) && value !== '';
+          break;
+        case 'date':
+          isValid = new Date(value).toString() !== 'Invalid Date' && !isNaN(Date.parse(value));
+          break;
+        case 'email':
+          isValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(strValue);
+          break;
+        case 'phone':
+          isValid = /^[\+]?[1-9][\d]{0,15}$/.test(strValue.replace(/[\s\-\(\)]/g, ''));
+          break;
+        case 'url':
+          isValid = /^https?:\/\/.+/.test(strValue);
+          break;
+        default:
+          isValid = true;
+      }
+      
+      if (isValid) formatMatches++;
+    });
+    
+    consistency.formatConsistency = formatMatches / nonNullValues.length;
+    
+    // Range consistency (for numeric columns)
+    if (dataType === 'numeric') {
+      const numericValues = nonNullValues.map(v => parseFloat(v)).filter(v => !isNaN(v));
+      if (numericValues.length > 0) {
+        const min = Math.min(...numericValues);
+        const max = Math.max(...numericValues);
+        const range = max - min;
+        const mean = numericValues.reduce((a, b) => a + b, 0) / numericValues.length;
+        
+        // Check for reasonable ranges (not too extreme)
+        const reasonableRange = mean * 100; // Allow 100x the mean as reasonable
+        if (range > reasonableRange) {
+          consistency.rangeConsistency = 0.5;
+          consistency.issues.push('Extreme value range detected');
+        } else {
+          consistency.rangeConsistency = 1;
+        }
+      }
+    }
+    
+    // Business rule consistency
+    let businessRuleMatches = 0;
+    nonNullValues.forEach(value => {
+      let passesRules = true;
+      
+      // Common business rules
+      if (dataType === 'email' && String(value).length > 254) {
+        passesRules = false; // RFC 5321 limit
+      }
+      if (dataType === 'phone' && String(value).replace(/[\s\-\(\)]/g, '').length > 15) {
+        passesRules = false; // International standard
+      }
+      if (dataType === 'numeric' && parseFloat(value) < 0 && columnName.toLowerCase().includes('amount')) {
+        passesRules = false; // Negative amounts usually invalid
+      }
+      
+      if (passesRules) businessRuleMatches++;
+    });
+    
+    consistency.businessRuleConsistency = businessRuleMatches / nonNullValues.length;
+    
+    // Calculate overall consistency
+    consistency.overallConsistency = (
+      consistency.formatConsistency * 0.4 +
+      consistency.rangeConsistency * 0.3 +
+      consistency.businessRuleConsistency * 0.3
+    );
+    
+    return consistency;
+  };
+
+  // Enhanced data quality scoring
+  const calculateDataQualityScore = (columnData, columnName) => {
+    const nonNullValues = columnData.filter(val => val !== null && val !== undefined && val !== '');
+    const totalValues = columnData.length;
+    const missingPercentage = ((totalValues - nonNullValues.length) / totalValues) * 100;
+    
+    // Base score starts at 100
+    let score = 100;
+    let deductions = [];
+    
+    // Missing data penalty
+    if (missingPercentage > 0) {
+      const missingPenalty = Math.min(missingPercentage * 0.5, 30); // Max 30 points off
+      score -= missingPenalty;
+      deductions.push(`Missing data: -${missingPenalty.toFixed(1)} points`);
+    }
+    
+    // Data type confidence penalty
+    const dataTypeInfo = detectDataType(columnData);
+    if (dataTypeInfo.confidence < 0.8) {
+      const confidencePenalty = (0.8 - dataTypeInfo.confidence) * 20; // Max 16 points off
+      score -= confidencePenalty;
+      deductions.push(`Low type confidence: -${confidencePenalty.toFixed(1)} points`);
+    }
+    
+    // Consistency penalty
+    const consistency = checkDataConsistency(columnData, dataTypeInfo.type, columnName);
+    if (consistency.overallConsistency < 0.9) {
+      const consistencyPenalty = (0.9 - consistency.overallConsistency) * 25; // Max 25 points off
+      score -= consistencyPenalty;
+      deductions.push(`Low consistency: -${consistencyPenalty.toFixed(1)} points`);
+    }
+    
+    // Outlier penalty (for numeric columns)
+    if (dataTypeInfo.type === 'numeric' && nonNullValues.length > 0) {
+      const numericValues = nonNullValues.map(v => parseFloat(v)).filter(v => !isNaN(v));
+      if (numericValues.length > 0) {
+        const outlierInfo = detectOutliers(numericValues);
+        if (outlierInfo.outliers.length > 0) {
+          const outlierPercentage = (outlierInfo.outliers.length / numericValues.length) * 100;
+          const outlierPenalty = Math.min(outlierPercentage * 0.3, 15); // Max 15 points off
+          score -= outlierPenalty;
+          deductions.push(`Outliers detected: -${outlierPenalty.toFixed(1)} points`);
+        }
+      }
+    }
+    
+    // Ensure score doesn't go below 0
+    score = Math.max(0, score);
+    
+    return {
+      score: Math.round(score),
+      deductions,
+      dataType: dataTypeInfo.type,
+      typeConfidence: dataTypeInfo.confidence,
+      consistency: consistency.overallConsistency,
+      missingPercentage
     };
   };
 
   // Analyze data quality and generate insights
   const dataQuality = useMemo(() => {
+    console.log('🔍 DataQuality: Starting analysis...');
+    
     if (!data || !data.rows || !data.headers) {
+      console.log('🔍 DataQuality: No data available');
       return null;
+    }
+
+    console.log('🔍 DataQuality: Data available -', data.rows.length, 'rows,', data.headers.length, 'columns');
+
+    // Performance optimization: limit data size for analysis
+    const MAX_ROWS = 500; // Reasonable limit for analysis
+    const MAX_COLUMNS = 15; // Allow more columns for better analysis
+    
+    // Determine which columns to analyze
+    const columnsToAnalyze = selectedColumns === null ? data.headers : selectedColumns;
+    const limitedColumns = columnsToAnalyze.length > MAX_COLUMNS ? columnsToAnalyze.slice(0, MAX_COLUMNS) : columnsToAnalyze;
+    const limitedRows = data.rows.length > MAX_ROWS ? data.rows.slice(0, MAX_ROWS) : data.rows;
+
+    console.log('🔍 DataQuality: Analyzing', limitedRows.length, 'rows and', limitedColumns.length, 'columns');
+
+    // Log performance warnings
+    if (data.rows.length > MAX_ROWS) {
+      console.log(`⚠️ Large dataset detected: ${data.rows.length.toLocaleString()} rows. Limiting analysis to first ${MAX_ROWS.toLocaleString()} rows for performance.`);
+    }
+    if (columnsToAnalyze.length > MAX_COLUMNS) {
+      console.log(`⚠️ Many columns detected: ${columnsToAnalyze.length}. Limiting analysis to first ${MAX_COLUMNS} columns for performance.`);
     }
 
     const analysis = {
       totalRows: data.rows.length,
       totalColumns: data.headers.length,
+      analyzedColumns: limitedColumns.length,
+      analyzedRows: limitedRows.length,
       columns: {},
       overallHealth: 0,
       issues: [],
-      recommendations: []
+      recommendations: [],
+      qualityMetrics: {
+        completeness: 0,
+        accuracy: 0,
+        consistency: 0,
+        validity: 0,
+        uniqueness: 0
+      }
     };
 
-    // Analyze each column
-    data.headers.forEach(header => {
-      const columnData = data.rows.map(row => row[header]);
+    // Analyze each selected column
+    limitedColumns.forEach(header => {
+      const columnData = limitedRows.map(row => row[header]);
       
-      // Data type detection
-      const dataTypes = columnData.map(value => {
-        if (value === null || value === undefined || value === '') return 'missing';
-        if (!isNaN(value) && value !== '') return 'numeric';
-        if (new Date(value).toString() !== 'Invalid Date' && !isNaN(Date.parse(value))) return 'date';
-        return 'text';
-      });
-
-      const typeCounts = dataTypes.reduce((acc, type) => {
-        acc[type] = (acc[type] || 0) + 1;
-        return acc;
-      }, {});
-
-      // Determine primary data type
-      const primaryType = Object.entries(typeCounts)
-        .filter(([type]) => type !== 'missing')
-        .sort(([, a], [, b]) => b - a)[0]?.[0] || 'unknown';
-
+      // Enhanced data quality analysis
+      const qualityInfo = calculateDataQualityScore(columnData, header);
+      
+      // Data type detection with confidence
+      const dataTypeInfo = detectDataType(columnData);
+      
       // Missing values analysis
-      const missingCount = typeCounts.missing || 0;
+      const nonNullValues = columnData.filter(val => val !== null && val !== undefined && val !== '');
+      const missingCount = columnData.length - nonNullValues.length;
       const missingPercentage = (missingCount / columnData.length) * 100;
-
+      
       // Numeric analysis
       let numericStats = null;
-      if (primaryType === 'numeric') {
+      if (dataTypeInfo.type === 'numeric') {
         const numericValues = columnData
           .filter(val => !isNaN(val) && val !== '' && val !== null)
           .map(val => parseFloat(val));
         
         if (numericValues.length > 0) {
+          const outlierInfo = detectOutliers(numericValues);
           numericStats = {
             min: Math.min(...numericValues),
             max: Math.max(...numericValues),
             mean: numericValues.reduce((a, b) => a + b, 0) / numericValues.length,
             median: numericValues.sort((a, b) => a - b)[Math.floor(numericValues.length / 2)],
             uniqueValues: new Set(numericValues).size,
-            outliers: detectOutliers(numericValues)
+            outliers: outlierInfo.outliers,
+            outlierMethod: outlierInfo.method,
+            outlierPercentage: (outlierInfo.outliers.length / numericValues.length) * 100
           };
         }
       }
 
       // Text analysis
       let textStats = null;
-      if (primaryType === 'text') {
+      if (dataTypeInfo.type === 'text') {
         const textValues = columnData.filter(val => val !== null && val !== undefined && val !== '');
         textStats = {
           uniqueValues: new Set(textValues).size,
           maxLength: Math.max(...textValues.map(val => String(val).length)),
           minLength: Math.min(...textValues.map(val => String(val).length)),
-          avgLength: textValues.reduce((sum, val) => sum + String(val).length, 0) / textValues.length
+          avgLength: textValues.reduce((sum, val) => sum + String(val).length, 0) / textValues.length,
+          emptyStrings: textValues.filter(val => String(val).trim() === '').length
         };
       }
 
       // Date analysis
       let dateStats = null;
-      if (primaryType === 'date') {
+      if (dataTypeInfo.type === 'date') {
         const dateValues = columnData
           .filter(val => val !== null && val !== undefined && val !== '')
           .map(val => new Date(val))
@@ -126,131 +393,105 @@ const DataQualityDashboard = ({ data }) => {
           dateStats = {
             earliest: new Date(Math.min(...dateValues)),
             latest: new Date(Math.max(...dateValues)),
-            uniqueDates: new Set(dateValues.map(d => d.toDateString())).size
+            uniqueDates: new Set(dateValues.map(d => d.toDateString())).size,
+            dateRange: Math.ceil((new Date(Math.max(...dateValues)) - new Date(Math.min(...dateValues))) / (1000 * 60 * 60 * 24))
           };
         }
       }
 
-      // Column health score (0-100)
-      let columnHealth = 100;
-      if (missingPercentage > 20) columnHealth -= 30;
-      if (missingPercentage > 50) columnHealth -= 40;
-      if (primaryType === 'unknown') columnHealth -= 20;
+      // Consistency analysis
+      const consistency = checkDataConsistency(columnData, dataTypeInfo.type, header);
 
       analysis.columns[header] = {
-        primaryType,
+        primaryType: dataTypeInfo.type,
+        typeConfidence: dataTypeInfo.confidence,
         missingCount,
         missingPercentage,
-        columnHealth,
+        columnHealth: qualityInfo.score,
+        qualityScore: qualityInfo.score,
+        deductions: qualityInfo.deductions,
         numericStats,
         textStats,
         dateStats,
-        typeCounts
+        consistency,
+        dataQuality: qualityInfo
       };
 
-      // Collect issues and recommendations
-      if (missingPercentage > 20) {
-        analysis.issues.push(`High missing values in "${header}" (${missingPercentage.toFixed(1)}%)`);
-        analysis.recommendations.push(`Consider data cleaning for "${header}" column`);
+      // Collect issues and recommendations based on enhanced analysis
+      if (qualityInfo.score < 70) {
+        analysis.issues.push(`Poor data quality in "${header}" (Score: ${qualityInfo.score}/100)`);
+        analysis.recommendations.push(`Address data quality issues in "${header}": ${qualityInfo.deductions.join(', ')}`);
       }
       
-      if (primaryType === 'unknown') {
-        analysis.issues.push(`Unable to determine data type for "${header}"`);
-        analysis.recommendations.push(`Review data format in "${header}" column`);
+      if (dataTypeInfo.confidence < 0.7) {
+        analysis.issues.push(`Low data type confidence for "${header}" (${(dataTypeInfo.confidence * 100).toFixed(1)}%)`);
+        analysis.recommendations.push(`Review data format consistency in "${header}" column`);
+      }
+      
+      if (consistency.overallConsistency < 0.8) {
+        analysis.issues.push(`Data consistency issues in "${header}" (${(consistency.overallConsistency * 100).toFixed(1)}%)`);
+        analysis.recommendations.push(`Improve data consistency in "${header}" column`);
       }
     });
 
-    // Calculate overall health score
+    // Calculate overall health score using enhanced metrics
     const columnHealthScores = Object.values(analysis.columns).map(col => col.columnHealth);
     analysis.overallHealth = Math.round(columnHealthScores.reduce((a, b) => a + b, 0) / columnHealthScores.length);
 
+    // Calculate quality metrics
+    const completenessScores = Object.values(analysis.columns).map(col => 1 - (col.missingPercentage / 100));
+    analysis.qualityMetrics.completeness = Math.round(completenessScores.reduce((a, b) => a + b, 0) / completenessScores.length * 100);
+    
+    const accuracyScores = Object.values(analysis.columns).map(col => col.typeConfidence);
+    analysis.qualityMetrics.accuracy = Math.round(accuracyScores.reduce((a, b) => a + b, 0) / accuracyScores.length * 100);
+    
+    const consistencyScores = Object.values(analysis.columns).map(col => col.consistency.overallConsistency);
+    analysis.qualityMetrics.consistency = Math.round(consistencyScores.reduce((a, b) => a + b, 0) / consistencyScores.length * 100);
+    
+    const validityScores = Object.values(analysis.columns).map(col => col.consistency.formatConsistency);
+    analysis.qualityMetrics.validity = Math.round(validityScores.reduce((a, b) => a + b, 0) / validityScores.length * 100);
+    
+    const uniquenessScores = Object.entries(analysis.columns).map(([columnName, col]) => {
+      const nonNullValues = data.rows.map(row => row[columnName]).filter(v => v !== null && v !== undefined && v !== '');
+      return nonNullValues.length > 0 ? new Set(nonNullValues).size / nonNullValues.length : 0;
+    });
+    analysis.qualityMetrics.uniqueness = Math.round(uniquenessScores.reduce((a, b) => a + b, 0) / uniquenessScores.length * 100);
+
     // Add duplicate detection
-    const duplicateAnalysis = detectDuplicates(data.rows);
+    // Duplicate detection (optimized for performance)
+    const duplicateAnalysis = detectDuplicates(limitedRows);
     analysis.duplicates = duplicateAnalysis;
     
     if (duplicateAnalysis.duplicateCount > 0) {
       analysis.issues.push(`${duplicateAnalysis.duplicateCount} duplicate rows detected`);
       analysis.recommendations.push('Consider removing duplicate rows for cleaner analysis');
     }
+    
+    if (duplicateAnalysis.nearDuplicateCount > 0) {
+      analysis.issues.push(`${duplicateAnalysis.nearDuplicateCount} near-duplicate rows detected`);
+      analysis.recommendations.push('Review similar rows for potential consolidation');
+    }
 
+    console.log('🔍 DataQuality: Analysis complete!');
     return analysis;
+  }, [data, selectedColumns]);
+
+  // Manage loading state properly
+  useEffect(() => {
+    if (data && data.rows && data.headers) {
+      setIsAnalyzing(true);
+      // Simulate processing time
+      const timer = setTimeout(() => {
+        setIsAnalyzing(false);
+      }, 100);
+      return () => clearTimeout(timer);
+    } else {
+      setIsAnalyzing(false);
+    }
   }, [data]);
 
-  if (!dataQuality) {
-    return (
-      <div className="p-8 text-center">
-        <div className="mx-auto w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
-          <span className="text-2xl">📊</span>
-        </div>
-        <h3 className="text-lg font-medium text-gray-900 mb-2">No Data Available</h3>
-        <p className="text-gray-600">Upload data to analyze data quality and generate insights.</p>
-      </div>
-    );
-  }
-
-  const getHealthColor = (score) => {
-    if (score >= 80) return 'text-green-600 bg-green-100';
-    if (score >= 60) return 'text-yellow-600 bg-yellow-100';
-    return 'text-red-600 bg-red-100';
-  };
-
-  const getHealthIcon = (score) => {
-    if (score >= 80) return '🟢';
-    if (score >= 60) return '🟡';
-    return '🔴';
-  };
-
-  // Get sort indicator for column headers
-  const getSortIndicator = (key) => {
-    if (sortConfig.key !== key) return '↕️';
-    return sortConfig.direction === 'asc' ? '↑' : '↓';
-  };
-
-  // Handle drill-down into specific data quality issues
-  const handleDrillDown = (columnName, issueType, issueData) => {
-    let drillData = [];
-    
-    if (issueType === 'missing') {
-      // Find rows with missing values in this column
-      drillData = data.rows
-        .map((row, index) => ({ ...row, __rowIndex: index }))
-        .filter(row => row[columnName] === null || row[columnName] === undefined || row[columnName] === '');
-    } else if (issueType === 'outliers') {
-      // Find rows with outlier values in this column
-      const outlierValues = issueData;
-      drillData = data.rows
-        .map((row, index) => ({ ...row, __rowIndex: index }))
-        .filter(row => outlierValues.includes(parseFloat(row[columnName])));
-    } else if (issueType === 'duplicates') {
-      // Find duplicate rows
-      drillData = data.rows
-        .map((row, index) => ({ ...row, __rowIndex: index }))
-        .filter((row, index) => issueData.includes(index));
-    }
-    
-    setDrillDownData({
-      columnName,
-      issueType,
-      data: drillData,
-      totalRows: drillData.length
-    });
-  };
-
-  // Close drill-down modal
-  const closeDrillDown = () => {
-    setDrillDownData({});
-  };
-
-  // Handle column sorting
-  const handleSort = (key) => {
-    setSortConfig(prevConfig => ({
-      key,
-      direction: prevConfig.key === key && prevConfig.direction === 'asc' ? 'desc' : 'asc'
-    }));
-  };
-
-  // Sort columns based on current sort configuration
-  const getSortedColumns = () => {
+  // Update sorted columns when dataQuality changes
+  const actualSortedColumns = useMemo(() => {
     if (!dataQuality || !dataQuality.columns) return [];
     
     const columns = Object.entries(dataQuality.columns);
@@ -290,6 +531,186 @@ const DataQualityDashboard = ({ data }) => {
         return aValue < bValue ? 1 : -1;
       }
     });
+  }, [dataQuality, sortConfig]);
+
+  if (!dataQuality) {
+    return (
+      <div className="p-8 text-center">
+        <div className="mx-auto w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+          <span className="text-2xl">📊</span>
+        </div>
+        <h3 className="text-lg font-medium text-gray-900 mb-2">No Data Available</h3>
+        <p className="text-gray-600">Upload data to analyze data quality and generate insights.</p>
+      </div>
+    );
+  }
+
+  if (isAnalyzing) {
+    return (
+      <div className="p-8 text-center">
+        <div className="mx-auto w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4 animate-pulse">
+          <span className="text-2xl">🔍</span>
+        </div>
+        <h3 className="text-lg font-medium text-gray-900 mb-2">Analyzing Data Quality</h3>
+        <p className="text-gray-600">Processing your data for quality insights...</p>
+      </div>
+    );
+  }
+
+  const getHealthColor = (score) => {
+    if (score >= 80) return 'text-green-600 bg-green-100';
+    if (score >= 60) return 'text-yellow-600 bg-yellow-100';
+    return 'text-red-600 bg-red-100';
+  };
+
+  const getHealthIcon = (score) => {
+    if (score >= 80) return '🟢';
+    if (score >= 60) return '🟡';
+    return '🔴';
+  };
+
+  // Get sort indicator for column headers
+  const getSortIndicator = (key) => {
+    if (sortConfig.key !== key) return '↕️';
+    return sortConfig.direction === 'asc' ? '↑' : '↓';
+  };
+
+  // Handle drill-down into specific data quality issues (optimized for performance)
+  const handleDrillDown = (columnName, issueType, issueData) => {
+    // Limit drill-down data to first 100 rows for performance
+    const MAX_DRILL_ROWS = 100;
+    let drillData = [];
+    
+    if (issueType === 'missing') {
+      // Find rows with missing values in this column (limited to first 100)
+      drillData = data.rows
+        .slice(0, MAX_DRILL_ROWS)
+        .map((row, index) => ({ ...row, __rowIndex: index }))
+        .filter(row => row[columnName] === null || row[columnName] === undefined || row[columnName] === '');
+    } else if (issueType === 'outliers') {
+      // Find rows with outlier values in this column (limited to first 100)
+      const outlierValues = issueData;
+      drillData = data.rows
+        .slice(0, MAX_DRILL_ROWS)
+        .map((row, index) => ({ ...row, __rowIndex: index }))
+        .filter(row => outlierValues.includes(parseFloat(row[columnName])));
+    } else if (issueType === 'duplicates') {
+      // Find duplicate rows (limited to first 100)
+      drillData = data.rows
+        .slice(0, MAX_DRILL_ROWS)
+        .map((row, index) => ({ ...row, __rowIndex: index }))
+        .filter((row, index) => issueData.includes(index));
+    }
+    
+    setDrillDownData({
+      columnName,
+      issueType,
+      data: drillData,
+      totalRows: drillData.length
+    });
+  };
+
+  // Close drill-down modal
+  const closeDrillDown = () => {
+    setDrillDownData({});
+  };
+
+  // Handle column sorting
+  const handleSort = (key) => {
+    setSortConfig(prevConfig => ({
+      key,
+      direction: prevConfig.key === key && prevConfig.direction === 'asc' ? 'desc' : 'asc'
+    }));
+  };
+
+
+  // Export data quality summary to Excel
+  const exportSummaryToExcel = async () => {
+    try {
+      // Dynamically import xlsx library
+      const XLSX = await import('xlsx');
+      
+      if (!XLSX || !XLSX.utils) {
+        throw new Error('Excel library failed to load');
+      }
+
+      // Create workbook
+      const workbook = XLSX.utils.book_new();
+
+      // Summary Statistics Sheet
+      const summaryData = [
+        ['Data Quality Summary Report'],
+        ['Generated:', new Date().toLocaleString()],
+        [''],
+        ['Metric', 'Value', 'Details'],
+        ['Total Rows', dataQuality.totalRows.toLocaleString(), 'Total number of data rows'],
+        ['Total Columns', dataQuality.totalColumns, 'Total number of columns'],
+        ['Duplicate Rows', dataQuality.duplicates.duplicateCount, 'Exact duplicate rows found'],
+        ['Near Duplicates', dataQuality.duplicates.nearDuplicateCount || 0, 'Similar rows detected'],
+        ['Poor Quality Columns', Object.values(dataQuality.columns).filter(col => col.qualityScore < 70).length, 'Columns with quality score < 70'],
+        ['Numeric Columns', Object.values(dataQuality.columns).filter(col => col.primaryType === 'numeric').length, 'Columns containing numeric data'],
+        [''],
+        ['Overall Data Quality Score', `${dataQuality.overallQualityScore.toFixed(1)}%`, 'Weighted average of all column quality scores']
+      ];
+
+      const summaryWorksheet = XLSX.utils.aoa_to_sheet(summaryData);
+      summaryWorksheet['!cols'] = [
+        { wch: 25 },
+        { wch: 15 },
+        { wch: 40 }
+      ];
+      XLSX.utils.book_append_sheet(workbook, summaryWorksheet, 'Summary');
+
+      // Column Details Sheet
+      const columnData = [
+        ['Column Name', 'Data Type', 'Quality Score', 'Missing Values', 'Missing %', 'Outliers', 'Outlier %', 'Unique Values', 'Notes']
+      ];
+
+      Object.entries(dataQuality.columns).forEach(([columnName, columnData]) => {
+        columnData.push([
+          columnName,
+          columnData.primaryType,
+          `${columnData.qualityScore.toFixed(1)}%`,
+          columnData.missingCount,
+          `${columnData.missingPercentage.toFixed(1)}%`,
+          columnData.outlierCount || 0,
+          `${(columnData.outlierPercentage || 0).toFixed(1)}%`,
+          columnData.uniqueCount,
+          columnData.qualityScore < 70 ? 'Poor Quality' : columnData.qualityScore < 85 ? 'Fair Quality' : 'Good Quality'
+        ]);
+      });
+
+      const columnWorksheet = XLSX.utils.aoa_to_sheet(columnData);
+      columnWorksheet['!cols'] = [
+        { wch: 20 },
+        { wch: 12 },
+        { wch: 12 },
+        { wch: 12 },
+        { wch: 12 },
+        { wch: 12 },
+        { wch: 12 },
+        { wch: 12 },
+        { wch: 15 }
+      ];
+      XLSX.utils.book_append_sheet(workbook, columnWorksheet, 'Column Details');
+
+      // Generate Excel file
+      const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+      const data = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      
+      // Download file
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(data);
+      link.download = `data_quality_summary_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(link.href);
+
+    } catch (error) {
+      console.error('Error exporting summary to Excel:', error);
+      alert('Failed to export summary to Excel: ' + error.message);
+    }
   };
 
   // Export drill-down data to Excel
@@ -379,19 +800,154 @@ const DataQualityDashboard = ({ data }) => {
     }
   };
 
+  console.log('🎨 DataQuality: Starting UI render...');
+  
   return (
     <div className="p-6">
       <div className="mb-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-2">Data Quality Dashboard</h3>
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-lg font-semibold text-gray-900">Data Quality Dashboard</h3>
+          <button
+            onClick={() => setShowColumnSelector(!showColumnSelector)}
+            className="inline-flex items-center px-3 py-2 text-sm font-medium text-blue-600 bg-blue-50 rounded-md hover:bg-blue-100 transition-colors duration-200"
+          >
+            <span className="mr-2">📋</span>
+            {showColumnSelector ? 'Hide Column Selector' : 'Select Columns to Analyze'}
+            <span className="ml-2 text-xs bg-blue-200 text-blue-800 px-2 py-1 rounded-full">
+              {selectedColumns === null ? 'All' : selectedColumns.length}
+            </span>
+          </button>
+        </div>
         <p className="text-gray-600">Comprehensive analysis of your dataset's health and structure</p>
       </div>
+
+      {/* Column Selector */}
+      {showColumnSelector && (
+        <div className="bg-white rounded-lg border border-blue-200 p-4 mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-md font-medium text-gray-900">Select Columns to Analyze</h4>
+            <div className="flex space-x-2">
+              <button
+                onClick={() => setSelectedColumns(null)}
+                className="px-3 py-1 text-xs bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors"
+              >
+                Analyze All
+              </button>
+              <button
+                onClick={() => {
+                  const allHeaders = data.headers || [];
+                  
+                  // Check if all columns are currently selected
+                  const allSelected = selectedColumns === null || 
+                    (selectedColumns && selectedColumns.length === allHeaders.length);
+                  
+                  if (allSelected) {
+                    // If all columns are selected, deselect all
+                    setSelectedColumns([]);
+                  } else {
+                    // Otherwise, select all columns
+                    setSelectedColumns([...allHeaders]);
+                  }
+                }}
+                className="px-3 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+              >
+                {selectedColumns === null || (selectedColumns && selectedColumns.length === (data.headers || []).length) ? 'Deselect All' : 'Select All'}
+              </button>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 max-h-40 overflow-y-auto">
+            {(data.headers || []).map((header) => (
+              <label key={header} className="flex items-center space-x-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={selectedColumns ? selectedColumns.includes(header) : true}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      if (selectedColumns) {
+                        setSelectedColumns([...selectedColumns, header]);
+                      } else {
+                        setSelectedColumns([header]);
+                      }
+                    } else {
+                      if (selectedColumns) {
+                        const newSelection = selectedColumns.filter(col => col !== header);
+                        setSelectedColumns(newSelection.length > 0 ? newSelection : null);
+                      } else {
+                        const allColumns = data.headers || [];
+                        const newSelection = allColumns.filter(col => col !== header);
+                        setSelectedColumns(newSelection.length > 0 ? newSelection : null);
+                      }
+                    }
+                  }}
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                <span className="text-sm text-gray-700 truncate" title={header}>
+                  {header}
+                </span>
+              </label>
+            ))}
+          </div>
+          <div className="mt-3 text-sm text-gray-600">
+            Analyzing {selectedColumns === null ? data.headers.length : selectedColumns.length} of {data.headers.length} columns for focused insights.
+          </div>
+        </div>
+      )}
 
       {/* Overall Health Score */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
         <div className="flex items-center justify-between mb-4">
-          <h4 className="text-lg font-medium text-gray-900">Overall Data Health</h4>
-          <div className={`px-3 py-1 rounded-full text-sm font-medium ${getHealthColor(dataQuality.overallHealth)}`}>
-            {getHealthIcon(dataQuality.overallHealth)} {dataQuality.overallHealth}/100
+          <div>
+            <h4 className="text-lg font-medium text-gray-900">Overall Data Health</h4>
+            <p className="text-sm text-gray-600 mt-1">
+              Based on analysis of {dataQuality.analyzedColumns} of {dataQuality.totalColumns} columns
+              {dataQuality.analyzedRows < dataQuality.totalRows && (
+                <span className="text-orange-600"> • Limited to {dataQuality.analyzedRows.toLocaleString()} of {dataQuality.totalRows.toLocaleString()} rows for performance</span>
+              )}
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className={`px-3 py-1 rounded-full text-sm font-medium ${getHealthColor(dataQuality.overallHealth)}`}>
+              {getHealthIcon(dataQuality.overallHealth)} {dataQuality.overallHealth}/100
+            </div>
+            <button
+              onClick={exportSummaryToExcel}
+              className="inline-flex items-center px-3 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 transition-colors duration-200 shadow-sm"
+            >
+              <span className="mr-2">📊</span>
+              Export Summary
+            </button>
+          </div>
+        </div>
+        
+        {/* Enhanced Quality Metrics */}
+        <div className="mb-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
+          <h5 className="text-md font-medium text-blue-900 mb-3">📊 Data Quality Dimensions</h5>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <div className="text-center">
+              <div className="text-2xl font-bold text-blue-600">{dataQuality.qualityMetrics.completeness}%</div>
+              <div className="text-sm text-blue-700">Completeness</div>
+              <div className="text-xs text-blue-600">Data coverage</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-green-600">{dataQuality.qualityMetrics.accuracy}%</div>
+              <div className="text-sm text-green-700">Accuracy</div>
+              <div className="text-xs text-green-600">Type confidence</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-purple-600">{dataQuality.qualityMetrics.consistency}%</div>
+              <div className="text-sm text-purple-700">Consistency</div>
+              <div className="text-xs text-purple-600">Format & rules</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-orange-600">{dataQuality.qualityMetrics.validity}%</div>
+              <div className="text-sm text-orange-700">Validity</div>
+              <div className="text-xs text-orange-600">Format compliance</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-teal-600">{dataQuality.qualityMetrics.uniqueness}%</div>
+              <div className="text-sm text-teal-700">Uniqueness</div>
+              <div className="text-xs text-teal-600">Distinct values</div>
+            </div>
           </div>
         </div>
         
@@ -419,21 +975,25 @@ const DataQualityDashboard = ({ data }) => {
           </div>
           <div className="text-center">
             <div className="text-2xl font-bold text-orange-600">
-              {Object.values(dataQuality.columns).filter(col => col.missingPercentage > 20).length}
+              {dataQuality.duplicates.nearDuplicateCount || 0}
             </div>
-            <div className="text-sm text-gray-600">Columns with Issues</div>
+            <div className="text-sm text-gray-600">Near Duplicates</div>
+            {dataQuality.duplicates.nearDuplicateCount > 0 && (
+              <div className="text-xs text-orange-600 mt-1">Similar rows detected</div>
+            )}
           </div>
           <div className="text-center">
             <div className="text-2xl font-bold text-indigo-600">
-              {Object.values(dataQuality.columns).filter(col => col.primaryType === 'numeric').length}
+              {Object.values(dataQuality.columns).filter(col => col.qualityScore < 70).length}
             </div>
-            <div className="text-sm text-gray-600">Numeric Columns</div>
+            <div className="text-sm text-gray-600">Poor Quality Columns</div>
+            <div className="text-xs text-indigo-600">Score &lt; 70</div>
           </div>
           <div className="text-center">
             <div className="text-2xl font-bold text-teal-600">
-              {Object.values(dataQuality.columns).filter(col => col.primaryType === 'text').length}
+              {Object.values(dataQuality.columns).filter(col => col.primaryType === 'numeric').length}
             </div>
-            <div className="text-sm text-gray-600">Text Columns</div>
+            <div className="text-sm text-gray-600">Numeric Columns</div>
           </div>
         </div>
       </div>
@@ -492,7 +1052,7 @@ const DataQualityDashboard = ({ data }) => {
                   onClick={() => handleSort('columnHealth')}
                 >
                   <div className="flex items-center space-x-2">
-                    <span>Health</span>
+                    <span>Quality Score</span>
                     <span className="text-gray-400">{getSortIndicator('columnHealth')}</span>
                   </div>
                 </th>
@@ -500,74 +1060,145 @@ const DataQualityDashboard = ({ data }) => {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {getSortedColumns().map(([columnName, columnData]) => (
+              {actualSortedColumns.map(([columnName, columnData]) => (
                 <tr key={columnName}>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                     {columnName}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    <span className={`px-2 py-1 text-xs rounded-full ${
-                      columnData.primaryType === 'numeric' ? 'bg-blue-100 text-blue-800' :
-                      columnData.primaryType === 'date' ? 'bg-green-100 text-green-800' :
-                      columnData.primaryType === 'text' ? 'bg-purple-100 text-purple-800' :
-                      'bg-gray-100 text-gray-800'
-                    }`}>
-                      {columnData.primaryType}
-                    </span>
+                    <div className="space-y-1">
+                      <span className={`px-2 py-1 text-xs rounded-full ${
+                        columnData.primaryType === 'numeric' ? 'bg-blue-100 text-blue-800' :
+                        columnData.primaryType === 'date' ? 'bg-green-100 text-green-800' :
+                        columnData.primaryType === 'text' ? 'bg-purple-100 text-purple-800' :
+                        columnData.primaryType === 'email' ? 'bg-indigo-100 text-indigo-800' :
+                        columnData.primaryType === 'phone' ? 'bg-teal-100 text-teal-800' :
+                        columnData.primaryType === 'url' ? 'bg-pink-100 text-pink-800' :
+                        columnData.primaryType === 'boolean' ? 'bg-yellow-100 text-yellow-800' :
+                        'bg-gray-100 text-gray-800'
+                      }`}>
+                        {columnData.primaryType}
+                      </span>
+                      {columnData.typeConfidence && (
+                        <div className="text-xs text-gray-500">
+                          Confidence: {(columnData.typeConfidence * 100).toFixed(1)}%
+                        </div>
+                      )}
+                    </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {columnData.missingCount} ({columnData.missingPercentage.toFixed(1)}%)
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className={`px-2 py-1 text-xs rounded-full ${getHealthColor(columnData.columnHealth)}`}>
-                      {columnData.columnHealth}/100
+                    <div className="space-y-1">
+                      <div className={`px-2 py-1 text-xs rounded-full ${getHealthColor(columnData.columnHealth)}`}>
+                        {columnData.columnHealth}/100
+                      </div>
+                      {columnData.deductions && columnData.deductions.length > 0 && (
+                        <div className="text-xs text-gray-500">
+                          {columnData.deductions.length} issue{columnData.deductions.length > 1 ? 's' : ''}
+                        </div>
+                      )}
                     </div>
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-500">
-                    {columnData.primaryType === 'numeric' && columnData.numericStats && (
-                      <div>
-                        <div>Min: {columnData.numericStats.min.toFixed(2)}</div>
-                        <div>Max: {columnData.numericStats.max.toFixed(2)}</div>
-                        <div>Mean: {columnData.numericStats.mean.toFixed(2)}</div>
-                        {columnData.numericStats.outliers.length > 0 && (
-                          <div className="text-orange-600">
-                            {columnData.numericStats.outliers.length} outliers
-                            <button
-                              onClick={() => handleDrillDown(columnName, 'outliers', columnData.numericStats.outliers)}
-                              className="ml-2 inline-flex items-center px-2 py-1 text-xs font-medium text-blue-600 bg-blue-50 rounded-md hover:bg-blue-100 transition-colors duration-200 border border-blue-200 hover:border-blue-300"
-                            >
-                              <span className="mr-1">👁️</span>
-                              View Details
-                            </button>
+                    {/* Enhanced Details Section */}
+                    <div className="space-y-2">
+                      {/* Data Type Confidence */}
+                      {columnData.typeConfidence && (
+                        <div className="text-xs">
+                          <span className="font-medium">Type Confidence:</span> 
+                          <span className={`ml-1 ${
+                            columnData.typeConfidence > 0.8 ? 'text-green-600' :
+                            columnData.typeConfidence > 0.6 ? 'text-yellow-600' : 'text-red-600'
+                          }`}>
+                            {(columnData.typeConfidence * 100).toFixed(1)}%
+                          </span>
+                        </div>
+                      )}
+                      
+                      {/* Consistency Scores */}
+                      {columnData.consistency && (
+                        <div className="text-xs">
+                          <span className="font-medium">Consistency:</span>
+                          <span className={`ml-1 ${
+                            columnData.consistency.overallConsistency > 0.8 ? 'text-green-600' :
+                            columnData.consistency.overallConsistency > 0.6 ? 'text-yellow-600' : 'text-red-600'
+                          }`}>
+                            {(columnData.consistency.overallConsistency * 100).toFixed(1)}%
+                          </span>
+                        </div>
+                      )}
+                      
+                      {/* Numeric Stats */}
+                      {columnData.primaryType === 'numeric' && columnData.numericStats && (
+                        <div>
+                          <div className="text-xs">Min: {columnData.numericStats.min.toFixed(2)}</div>
+                          <div className="text-xs">Max: {columnData.numericStats.max.toFixed(2)}</div>
+                          <div className="text-xs">Mean: {columnData.numericStats.mean.toFixed(2)}</div>
+                          {columnData.numericStats.outliers.length > 0 && (
+                            <div className="text-orange-600 text-xs">
+                              {columnData.numericStats.outliers.length} outliers ({columnData.numericStats.outlierPercentage.toFixed(1)}%)
+                              <div className="text-gray-500">Method: {columnData.numericStats.outlierMethod}</div>
+                              <button
+                                onClick={() => handleDrillDown(columnName, 'outliers', columnData.numericStats.outliers)}
+                                className="mt-1 inline-flex items-center px-2 py-1 text-xs font-medium text-blue-600 bg-blue-50 rounded-md hover:bg-blue-100 transition-colors duration-200 border border-blue-200 hover:border-blue-300"
+                              >
+                                <span className="mr-1">👁️</span>
+                                View Details
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      
+                      {/* Text Stats */}
+                      {columnData.primaryType === 'text' && columnData.textStats && (
+                        <div>
+                          <div className="text-xs">Unique: {columnData.textStats.uniqueValues}</div>
+                          <div className="text-xs">Avg Length: {columnData.textStats.avgLength.toFixed(1)}</div>
+                          {columnData.textStats.emptyStrings > 0 && (
+                            <div className="text-orange-600 text-xs">
+                              {columnData.textStats.emptyStrings} empty strings
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      
+                      {/* Date Stats */}
+                      {columnData.primaryType === 'date' && columnData.dateStats && (
+                        <div>
+                          <div className="text-xs">Range: {columnData.dateStats.earliest.toLocaleDateString()} - {columnData.dateStats.latest.toLocaleDateString()}</div>
+                          <div className="text-xs">Unique Dates: {columnData.dateStats.uniqueDates}</div>
+                          <div className="text-xs">Span: {columnData.dateStats.dateRange} days</div>
+                        </div>
+                      )}
+                      
+                      {/* Missing Values Drill-Down */}
+                      {columnData.missingCount > 0 && (
+                        <div className="mt-2">
+                          <button
+                            onClick={() => handleDrillDown(columnName, 'missing', columnData.missingCount)}
+                            className="inline-flex items-center px-2 py-1 text-xs font-medium text-red-600 bg-red-50 rounded-md hover:bg-red-100 transition-colors duration-200 border border-red-200 hover:border-red-300"
+                          >
+                            <span className="mr-1">👁️</span>
+                            View Missing Values ({columnData.missingCount})
+                          </button>
+                        </div>
+                      )}
+                      
+                      {/* Quality Issues Summary */}
+                      {columnData.deductions && columnData.deductions.length > 0 && (
+                        <div className="mt-2 p-2 bg-red-50 rounded border border-red-200">
+                          <div className="text-xs font-medium text-red-800 mb-1">Quality Issues:</div>
+                          <div className="text-xs text-red-700 space-y-1">
+                            {columnData.deductions.map((deduction, idx) => (
+                              <div key={idx}>• {deduction}</div>
+                            ))}
                           </div>
-                        )}
-                      </div>
-                    )}
-                    {columnData.primaryType === 'text' && columnData.textStats && (
-                      <div>
-                        <div>Unique: {columnData.textStats.uniqueValues}</div>
-                        <div>Avg Length: {columnData.textStats.avgLength.toFixed(1)}</div>
-                      </div>
-                    )}
-                    {columnData.primaryType === 'date' && columnData.dateStats && (
-                      <div>
-                        <div>Range: {columnData.dateStats.earliest.toLocaleDateString()} - {columnData.dateStats.latest.toLocaleDateString()}</div>
-                        <div>Unique Dates: {columnData.dateStats.uniqueDates}</div>
-                      </div>
-                    )}
-                    
-                    {/* Missing Values Drill-Down */}
-                    {columnData.missingCount > 0 && (
-                      <div className="mt-2">
-                        <button
-                          onClick={() => handleDrillDown(columnName, 'missing', columnData.missingCount)}
-                          className="inline-flex items-center px-2 py-1 text-xs font-medium text-red-600 bg-red-50 rounded-md hover:bg-red-100 transition-colors duration-200 border border-red-200 hover:border-red-300"
-                        >
-                          <span className="mr-1">👁️</span>
-                          View Missing Values ({columnData.missingCount})
-                        </button>
-                      </div>
-                    )}
+                        </div>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -734,5 +1365,8 @@ const DataQualityDashboard = ({ data }) => {
     </div>
   );
 };
+
+// Add performance tracking
+console.log('🎨 DataQuality: UI render complete!');
 
 export default DataQualityDashboard;

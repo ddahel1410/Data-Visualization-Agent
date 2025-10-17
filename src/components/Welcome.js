@@ -1,13 +1,20 @@
-import React from 'react';
-import SmartRecommendations from './SmartRecommendations';
+import React, { useState } from 'react';
 
 const Welcome = ({ hasData = false, data = null }) => {
+  const [expandedFeatures, setExpandedFeatures] = useState({});
+
+  const toggleFeature = (featureId) => {
+    setExpandedFeatures(prev => ({
+      ...prev,
+      [featureId]: !prev[featureId]
+    }));
+  };
   return (
     <div className="max-w-6xl mx-auto p-8 bg-white">
       {/* Hero Section */}
       <div className="text-center mb-12">
         <h1 className="text-4xl font-bold text-gray-900 mb-4">
-          Welcome to Analyst Agent
+          Welcome to Data Visualization Agent
         </h1>
         <p className="text-xl text-gray-600 mb-6">
           Your comprehensive data analysis platform for insights, visualizations, and reporting
@@ -61,211 +68,312 @@ const Welcome = ({ hasData = false, data = null }) => {
         <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center">
           Key Features
         </h2>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="space-y-3">
           
           {/* Data Visualization */}
-          <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
-            <h3 className="text-xl font-semibold text-gray-800 mb-4 flex items-center">
-              Data Visualization
-            </h3>
-            <ul className="space-y-2 text-sm text-gray-600">
-              <li className="flex items-center">
-                <span className="text-green-500 mr-2">✓</span>
-                Multiple chart types: Pie, Bar, Line, Scatter, Histogram
-              </li>
-              <li className="flex items-center">
-                <span className="text-green-500 mr-2">✓</span>
-                Interactive charts with professional styling
-              </li>
-              <li className="flex items-center">
-                <span className="text-green-500 mr-2">✓</span>
-                Export charts as PNG, JPEG, or Excel
-              </li>
-              <li className="flex items-center">
-                <span className="text-green-500 mr-2">✓</span>
-                Customizable dimensions and data filtering
-              </li>
-            </ul>
-          </div>
-
-          {/* Advanced Pivot Tables */}
-          <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
-            <h3 className="text-xl font-semibold text-gray-800 mb-4 flex items-center">
-              Enterprise Pivot Tables
-            </h3>
-            <ul className="space-y-2 text-sm text-gray-600">
-              <li className="flex items-center">
-                <span className="text-green-500 mr-2">✓</span>
-                Multiple row dimensions with hierarchical grouping
-              </li>
-              <li className="flex items-center">
-                <span className="text-green-500 mr-2">✓</span>
-                Smart subtotals and grand totals
-              </li>
-              <li className="flex items-center">
-                <span className="text-green-500 mr-2">✓</span>
-                Expand/collapse sections for detailed analysis
-              </li>
-              <li className="flex items-center">
-                <span className="text-green-500 mr-2">✓</span>
-                Drill-down capability to see underlying records
-              </li>
-              <li className="flex items-center">
-                <span className="text-green-500 mr-2">✓</span>
-                Multiple calculation types: Sum, Average, Count, Percentage
-              </li>
-            </ul>
-          </div>
-
-          {/* Data Management */}
-          <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
-            <h3 className="text-xl font-semibold text-gray-800 mb-4 flex items-center">
-              Data Management
-            </h3>
-            <ul className="space-y-2 text-sm text-gray-600">
-              <li className="flex items-center">
-                <span className="text-green-500 mr-2">✓</span>
-                Comprehensive data preview with column information
-              </li>
-              <li className="flex items-center">
-                <span className="text-green-500 mr-2">✓</span>
-                File information and data quality insights
-              </li>
-              <li className="flex items-center">
-                <span className="text-green-500 mr-2">✓</span>
-                Export processed data to Excel or CSV
-              </li>
-              <li className="flex items-center">
-                <span className="text-green-500 mr-2">✓</span>
-                Support for large datasets (up to 10MB)
-              </li>
-            </ul>
-          </div>
-
-          {/* Advanced Features */}
-          <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
-            <h3 className="text-xl font-semibold text-gray-800 mb-4 flex items-center">
-              Advanced Features
-            </h3>
-            <ul className="space-y-2 text-sm text-gray-600">
-              <li className="flex items-center">
-                <span className="text-green-500 mr-2">✓</span>
-                Configuration persistence across tabs
-              </li>
-              <li className="flex items-center">
-                <span className="text-green-500 mr-2">✓</span>
-                Optional conditional formatting with color coding
-              </li>
-              <li className="flex items-center">
-                <span className="text-green-500 mr-2">✓</span>
-                Professional export options for all analysis types
-              </li>
-              <li className="flex items-center">
-                <span className="text-green-500 mr-2">✓</span>
-                Responsive design that works on all devices
-              </li>
-            </ul>
+          <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+            <button
+              onClick={() => toggleFeature('visualization')}
+              className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
+            >
+              <h3 className="text-lg font-semibold text-gray-800 flex items-center">
+                📊 Data Visualization
+              </h3>
+              <span className="text-gray-500 text-xl">
+                {expandedFeatures['visualization'] ? '−' : '+'}
+              </span>
+            </button>
+            {expandedFeatures['visualization'] && (
+              <div className="px-6 pb-4 pt-2 border-t border-gray-100">
+                <ul className="space-y-2 text-sm text-gray-600">
+                  <li className="flex items-center">
+                    <span className="text-green-500 mr-2">✓</span>
+                    Multiple chart types: Pie, Bar, Line, Scatter, Histogram
+                  </li>
+                  <li className="flex items-center">
+                    <span className="text-green-500 mr-2">✓</span>
+                    Interactive charts with professional styling
+                  </li>
+                  <li className="flex items-center">
+                    <span className="text-green-500 mr-2">✓</span>
+                    Export charts as PNG, JPEG, or Excel
+                  </li>
+                  <li className="flex items-center">
+                    <span className="text-green-500 mr-2">✓</span>
+                    Customizable dimensions and data filtering
+                  </li>
+                </ul>
+              </div>
+            )}
           </div>
 
           {/* Interactive Dashboards */}
-          <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
-            <h3 className="text-xl font-semibold text-gray-800 mb-4 flex items-center">
-              Interactive Dashboards
-            </h3>
-            <ul className="space-y-2 text-sm text-gray-600">
-              <li className="flex items-center">
-                <span className="text-green-500 mr-2">✓</span>
-                Multi-chart grid layouts (2x2, 3x2, 2x3, 3x3)
-              </li>
-              <li className="flex items-center">
-                <span className="text-green-500 mr-2">✓</span>
-                Global filtering across all charts simultaneously
-              </li>
-              <li className="flex items-center">
-                <span className="text-green-500 mr-2">✓</span>
-                Pre-built chart templates for quick setup
-              </li>
-              <li className="flex items-center">
-                <span className="text-green-500 mr-2">✓</span>
-                Professional dashboard appearance and interactions
-              </li>
-            </ul>
+          <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+            <button
+              onClick={() => toggleFeature('dashboards')}
+              className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
+            >
+              <h3 className="text-lg font-semibold text-gray-800 flex items-center">
+                📈 Interactive Dashboards
+              </h3>
+              <span className="text-gray-500 text-xl">
+                {expandedFeatures['dashboards'] ? '−' : '+'}
+              </span>
+            </button>
+            {expandedFeatures['dashboards'] && (
+              <div className="px-6 pb-4 pt-2 border-t border-gray-100">
+                <ul className="space-y-2 text-sm text-gray-600">
+                  <li className="flex items-center">
+                    <span className="text-green-500 mr-2">✓</span>
+                    Multi-chart grid layouts (1+2, 1+3, 2x2, 3x2, 2x3, 3x3)
+                  </li>
+                  <li className="flex items-center">
+                    <span className="text-green-500 mr-2">✓</span>
+                    Click-to-drill-down: Click charts to see detailed data
+                  </li>
+                  <li className="flex items-center">
+                    <span className="text-green-500 mr-2">✓</span>
+                    Advanced filtering: Category, Numeric Range, Text Search, Date Range
+                  </li>
+                  <li className="flex items-center">
+                    <span className="text-green-500 mr-2">✓</span>
+                    Quick date presets (Last 7/30 Days, Month, Quarter, YTD)
+                  </li>
+                  <li className="flex items-center">
+                    <span className="text-green-500 mr-2">✓</span>
+                    Collapsible, tabbed filters with active filter badges
+                  </li>
+                  <li className="flex items-center">
+                    <span className="text-green-500 mr-2">✓</span>
+                    Save/Load configurations & Export to PDF
+                  </li>
+                </ul>
+              </div>
+            )}
+          </div>
+
+          {/* Advanced Pivot Tables */}
+          <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+            <button
+              onClick={() => toggleFeature('pivot')}
+              className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
+            >
+              <h3 className="text-lg font-semibold text-gray-800 flex items-center">
+                🔢 Enterprise Pivot Tables
+              </h3>
+              <span className="text-gray-500 text-xl">
+                {expandedFeatures['pivot'] ? '−' : '+'}
+              </span>
+            </button>
+            {expandedFeatures['pivot'] && (
+              <div className="px-6 pb-4 pt-2 border-t border-gray-100">
+                <ul className="space-y-2 text-sm text-gray-600">
+                  <li className="flex items-center">
+                    <span className="text-green-500 mr-2">✓</span>
+                    Multiple row dimensions with hierarchical grouping
+                  </li>
+                  <li className="flex items-center">
+                    <span className="text-green-500 mr-2">✓</span>
+                    Smart subtotals and grand totals
+                  </li>
+                  <li className="flex items-center">
+                    <span className="text-green-500 mr-2">✓</span>
+                    Expand/collapse sections for detailed analysis
+                  </li>
+                  <li className="flex items-center">
+                    <span className="text-green-500 mr-2">✓</span>
+                    Drill-down capability to see underlying records
+                  </li>
+                </ul>
+              </div>
+            )}
+          </div>
+
+          {/* Data Preview */}
+          <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+            <button
+              onClick={() => toggleFeature('preview')}
+              className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
+            >
+              <h3 className="text-lg font-semibold text-gray-800 flex items-center">
+                📋 Data Preview & Exploration
+              </h3>
+              <span className="text-gray-500 text-xl">
+                {expandedFeatures['preview'] ? '−' : '+'}
+              </span>
+            </button>
+            {expandedFeatures['preview'] && (
+              <div className="px-6 pb-4 pt-2 border-t border-gray-100">
+                <ul className="space-y-2 text-sm text-gray-600">
+                  <li className="flex items-center">
+                    <span className="text-green-500 mr-2">✓</span>
+                    Virtual scrolling for massive datasets
+                  </li>
+                  <li className="flex items-center">
+                    <span className="text-green-500 mr-2">✓</span>
+                    Column filtering and sorting capabilities
+                  </li>
+                  <li className="flex items-center">
+                    <span className="text-green-500 mr-2">✓</span>
+                    Row selection and export functionality
+                  </li>
+                  <li className="flex items-center">
+                    <span className="text-green-500 mr-2">✓</span>
+                    Real-time search across all columns
+                  </li>
+                </ul>
+              </div>
+            )}
           </div>
 
           {/* Data Quality & Profiling */}
-          <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
-            <h3 className="text-xl font-semibold text-gray-800 mb-4 flex items-center">
-              Data Quality & Profiling
-            </h3>
-            <ul className="space-y-2 text-sm text-gray-600">
-              <li className="flex items-center">
-                <span className="text-green-500 mr-2">✓</span>
-                Comprehensive data health analysis and scoring
-              </li>
-              <li className="flex items-center">
-                <span className="text-green-500 mr-2">✓</span>
-                Missing values, outliers, and duplicate detection
-              </li>
-              <li className="flex items-center">
-                <span className="text-green-500 mr-2">✓</span>
-                Interactive drill-down to view problematic records
-              </li>
-              <li className="flex items-center">
-                <span className="text-green-500 mr-2">✓</span>
-                Excel export for data quality reports
-              </li>
-            </ul>
+          <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+            <button
+              onClick={() => toggleFeature('quality')}
+              className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
+            >
+              <h3 className="text-lg font-semibold text-gray-800 flex items-center">
+                🔍 Data Quality & Profiling
+              </h3>
+              <span className="text-gray-500 text-xl">
+                {expandedFeatures['quality'] ? '−' : '+'}
+              </span>
+            </button>
+            {expandedFeatures['quality'] && (
+              <div className="px-6 pb-4 pt-2 border-t border-gray-100">
+                <ul className="space-y-2 text-sm text-gray-600">
+                  <li className="flex items-center">
+                    <span className="text-green-500 mr-2">✓</span>
+                    Comprehensive data health analysis and scoring
+                  </li>
+                  <li className="flex items-center">
+                    <span className="text-green-500 mr-2">✓</span>
+                    Missing values, outliers, and duplicate detection
+                  </li>
+                  <li className="flex items-center">
+                    <span className="text-green-500 mr-2">✓</span>
+                    Interactive drill-down to view problematic records
+                  </li>
+                  <li className="flex items-center">
+                    <span className="text-green-500 mr-2">✓</span>
+                    Excel export for data quality reports
+                  </li>
+                </ul>
+              </div>
+            )}
           </div>
 
-          {/* Smart AI Recommendations */}
-          <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
-            <h3 className="text-xl font-semibold text-gray-800 mb-4 flex items-center">
-              Smart AI Recommendations
-            </h3>
-            <ul className="space-y-2 text-sm text-gray-600">
-              <li className="flex items-center">
-                <span className="text-green-500 mr-2">✓</span>
-                AI-powered chart type suggestions based on data
-              </li>
-              <li className="flex items-center">
-                <span className="text-green-500 mr-2">✓</span>
-                Column-specific analysis and insights
-              </li>
-              <li className="flex items-center">
-                <span className="text-green-500 mr-2">✓</span>
-                One-click chart creation from recommendations
-              </li>
-              <li className="flex items-center">
-                <span className="text-green-500 mr-2">✓</span>
-                Customizable column selection for focused analysis
-              </li>
-            </ul>
+          {/* Smart Recommendations */}
+          <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+            <button
+              onClick={() => toggleFeature('recommendations')}
+              className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
+            >
+              <h3 className="text-lg font-semibold text-gray-800 flex items-center">
+                💡 Smart Recommendations
+              </h3>
+              <span className="text-gray-500 text-xl">
+                {expandedFeatures['recommendations'] ? '−' : '+'}
+              </span>
+            </button>
+            {expandedFeatures['recommendations'] && (
+              <div className="px-6 pb-4 pt-2 border-t border-gray-100">
+                <ul className="space-y-2 text-sm text-gray-600">
+                  <li className="flex items-center">
+                    <span className="text-green-500 mr-2">✓</span>
+                    Intelligent chart type suggestions based on data characteristics
+                  </li>
+                  <li className="flex items-center">
+                    <span className="text-green-500 mr-2">✓</span>
+                    Column-specific analysis and insights
+                  </li>
+                  <li className="flex items-center">
+                    <span className="text-green-500 mr-2">✓</span>
+                    One-click chart creation from recommendations
+                  </li>
+                  <li className="flex items-center">
+                    <span className="text-green-500 mr-2">✓</span>
+                    Statistical analysis and pattern detection
+                  </li>
+                </ul>
+              </div>
+            )}
           </div>
 
           {/* Data Comparison Tool */}
-          <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
-            <h3 className="text-xl font-semibold text-gray-800 mb-4 flex items-center">
-              Data Comparison Tool
-            </h3>
-            <ul className="space-y-2 text-sm text-gray-600">
-              <li className="flex items-center">
-                <span className="text-green-500 mr-2">✓</span>
-                VLOOKUP-style comparison between multiple datasets
-              </li>
-              <li className="flex items-center">
-                <span className="text-green-500 mr-2">✓</span>
-                Row matching using key columns and value validation
-              </li>
-              <li className="flex items-center">
-                <span className="text-green-500 mr-2">✓</span>
-                Structure analysis and merge compatibility assessment
-              </li>
-              <li className="flex items-center">
-                <span className="text-green-500 mr-2">✓</span>
-                Professional comparison reports with export functionality
-              </li>
-            </ul>
+          <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+            <button
+              onClick={() => toggleFeature('comparison')}
+              className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
+            >
+              <h3 className="text-lg font-semibold text-gray-800 flex items-center">
+                🔄 Data Comparison Tool
+              </h3>
+              <span className="text-gray-500 text-xl">
+                {expandedFeatures['comparison'] ? '−' : '+'}
+              </span>
+            </button>
+            {expandedFeatures['comparison'] && (
+              <div className="px-6 pb-4 pt-2 border-t border-gray-100">
+                <ul className="space-y-2 text-sm text-gray-600">
+                  <li className="flex items-center">
+                    <span className="text-green-500 mr-2">✓</span>
+                    VLOOKUP-style comparison between multiple datasets
+                  </li>
+                  <li className="flex items-center">
+                    <span className="text-green-500 mr-2">✓</span>
+                    Row matching using key columns and value validation
+                  </li>
+                  <li className="flex items-center">
+                    <span className="text-green-500 mr-2">✓</span>
+                    Structure analysis and merge compatibility assessment
+                  </li>
+                  <li className="flex items-center">
+                    <span className="text-green-500 mr-2">✓</span>
+                    Professional comparison reports with export functionality
+                  </li>
+                </ul>
+              </div>
+            )}
           </div>
+
+          {/* Export & Sharing */}
+          <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+            <button
+              onClick={() => toggleFeature('export')}
+              className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
+            >
+              <h3 className="text-lg font-semibold text-gray-800 flex items-center">
+                💾 Export & Sharing
+              </h3>
+              <span className="text-gray-500 text-xl">
+                {expandedFeatures['export'] ? '−' : '+'}
+              </span>
+            </button>
+            {expandedFeatures['export'] && (
+              <div className="px-6 pb-4 pt-2 border-t border-gray-100">
+                <ul className="space-y-2 text-sm text-gray-600">
+                  <li className="flex items-center">
+                    <span className="text-green-500 mr-2">✓</span>
+                    Export charts as PNG, JPEG, or SVG images
+                  </li>
+                  <li className="flex items-center">
+                    <span className="text-green-500 mr-2">✓</span>
+                    Export data to Excel or CSV formats
+                  </li>
+                  <li className="flex items-center">
+                    <span className="text-green-500 mr-2">✓</span>
+                    PDF generation for complete dashboards
+                  </li>
+                  <li className="flex items-center">
+                    <span className="text-green-500 mr-2">✓</span>
+                    Configuration saving for recurring reports
+                  </li>
+                </ul>
+              </div>
+            )}
+          </div>
+
         </div>
       </div>
 
@@ -328,35 +436,16 @@ const Welcome = ({ hasData = false, data = null }) => {
               <h3 className="font-semibold text-gray-800 mb-3">Analysis Tips</h3>
               <ul className="space-y-1 text-sm text-gray-600">
                 <li>• Use hierarchical row dimensions for drill-down analysis</li>
-                <li>• Double-click cells to see underlying records</li>
-                <li>• Export drill-down data for deeper investigation</li>
-                <li>• Use filters to focus on specific data subsets</li>
+                <li>• Combine multiple filter types for precise analysis</li>
+                <li>• Use quick date presets for common time periods</li>
+                <li>• Collapse filters section to save screen space</li>
+                <li>• Save dashboard configs for recurring reports</li>
               </ul>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Sample Data */}
-      <div className="mb-12">
-        <h2 className="text-2xl font-bold text-gray-800 mb-6">
-          Sample Data
-        </h2>
-        <div className="bg-gray-50 border border-gray-200 rounded-lg p-6">
-          <p className="text-gray-700 mb-4">
-            Don't have data ready? Try our sample dataset to explore all features:
-          </p>
-          <div className="bg-white border rounded p-4">
-            <h4 className="font-semibold text-gray-800 mb-2">Sample Sales Data (sample_data.csv)</h4>
-            <p className="text-sm text-gray-600 mb-3">
-              Contains sales transactions with regions, products, dates, and amounts - perfect for demonstrating pivot tables and charts.
-            </p>
-            <p className="text-xs text-gray-500">
-              File location: Look for 'sample_data.csv' in your project folder
-            </p>
-          </div>
-        </div>
-      </div>
 
       {/* Support */}
       <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 text-center">
@@ -413,14 +502,95 @@ const Welcome = ({ hasData = false, data = null }) => {
         </div>
       )}
 
-      {/* Smart Recommendations - show when data is available */}
-      {hasData && data && (
+      {/* Dashboard Features Guide - show when data is available */}
+      {hasData && (
         <div className="mt-6">
-          <SmartRecommendations 
-            data={data} 
-            onNavigateToTab={() => {}} // No navigation from welcome tab
-            onConfigureChart={() => {}} // No chart configuration from welcome tab
-          />
+          <div className="bg-gradient-to-r from-blue-50 to-purple-50 border-2 border-blue-200 rounded-lg p-6">
+            <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center">
+              📊 Interactive Dashboard Features
+            </h2>
+            <p className="text-gray-700 mb-6">
+              Go to the <strong>Interactive Dashboard</strong> tab to access these powerful features:
+            </p>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Save & Load */}
+              <div className="bg-white rounded-lg p-4 shadow-sm">
+                <h3 className="font-semibold text-gray-800 mb-2 flex items-center">
+                  <span className="text-2xl mr-2">💾</span>
+                  Save & Load Dashboards
+                </h3>
+                <p className="text-sm text-gray-600 mb-3">
+                  Build your perfect dashboard once, then save it for reuse with future datasets.
+                </p>
+                <ul className="text-xs text-gray-600 space-y-1">
+                  <li>• Click <strong>💾 Save</strong> to download your dashboard configuration</li>
+                  <li>• Click <strong>📂 Load</strong> to restore a saved dashboard</li>
+                  <li>• Saves layouts, charts, filters - not the data itself</li>
+                  <li>• Perfect for recurring reports with updated data</li>
+                </ul>
+              </div>
+
+              {/* PDF Export */}
+              <div className="bg-white rounded-lg p-4 shadow-sm">
+                <h3 className="font-semibold text-gray-800 mb-2 flex items-center">
+                  <span className="text-2xl mr-2">📄</span>
+                  Export to PDF
+                </h3>
+                <p className="text-sm text-gray-600 mb-3">
+                  Create professional PDF reports from your dashboards instantly.
+                </p>
+                <ul className="text-xs text-gray-600 space-y-1">
+                  <li>• Click <strong>📄 Export PDF</strong> to generate report</li>
+                  <li>• Captures entire dashboard with all charts</li>
+                  <li>• Includes timestamp for record keeping</li>
+                  <li>• Perfect for presentations and documentation</li>
+                </ul>
+              </div>
+
+              {/* Advanced Filters */}
+              <div className="bg-white rounded-lg p-4 shadow-sm">
+                <h3 className="font-semibold text-gray-800 mb-2 flex items-center">
+                  <span className="text-2xl mr-2">🔧</span>
+                  Advanced Filtering System
+                </h3>
+                <p className="text-sm text-gray-600 mb-3">
+                  Four powerful filter types in a collapsible, tabbed interface.
+                </p>
+                <ul className="text-xs text-gray-600 space-y-1">
+                  <li>• <strong>Category Filters:</strong> Multi-select checkboxes (OR logic)</li>
+                  <li>• <strong>Numeric Ranges:</strong> Filter by min/max values</li>
+                  <li>• <strong>Text Search:</strong> Search specific columns</li>
+                  <li>• <strong>Date Ranges:</strong> With quick presets (Last 7/30 Days, YTD)</li>
+                  <li>• All filters work together cumulatively</li>
+                  <li>• Active filter badges show what's applied</li>
+                </ul>
+              </div>
+
+              {/* Drill-Down */}
+              <div className="bg-white rounded-lg p-4 shadow-sm">
+                <h3 className="font-semibold text-gray-800 mb-2 flex items-center">
+                  <span className="text-2xl mr-2">🔍</span>
+                  Click-to-Drill-Down
+                </h3>
+                <p className="text-sm text-gray-600 mb-3">
+                  Click any chart element to see the underlying detailed data.
+                </p>
+                <ul className="text-xs text-gray-600 space-y-1">
+                  <li>• Click any pie slice or bar to drill down</li>
+                  <li>• View all raw data rows for that category</li>
+                  <li>• See summary statistics (count, total, avg)</li>
+                  <li>• Export drill-down data to CSV or Excel</li>
+                </ul>
+              </div>
+            </div>
+
+            <div className="mt-4 bg-blue-100 border border-blue-300 rounded-lg p-4">
+              <p className="text-sm text-blue-800 font-medium text-center">
+                💡 Pro Tip: Create your dashboard, save the configuration, then use it weekly/monthly with updated data files!
+              </p>
+            </div>
+          </div>
         </div>
       )}
     </div>
